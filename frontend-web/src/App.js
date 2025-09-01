@@ -2330,6 +2330,9 @@ const EditCreditCardModal = ({ card, onSave, onCancel }) => {
     </div>
   );
 };
+
+// Página Bancos
+const BanksPage = () => {
   const [banks, setBanks] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
