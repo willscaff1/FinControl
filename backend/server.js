@@ -29,6 +29,8 @@ const TransactionSchema = new mongoose.Schema({
   type: String,
   category: String,
   paymentMethod: String, // PIX, débito, crédito
+  bank: String, // Campo para banco (débito/PIX)
+  creditCard: String, // Campo para cartão de crédito
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   date: { type: Date, default: Date.now },
   isRecurring: { type: Boolean, default: false },
@@ -43,6 +45,28 @@ const TransactionSchema = new mongoose.Schema({
 
 const User = mongoose.model('User', UserSchema);
 const Transaction = mongoose.model('Transaction', TransactionSchema);
+
+// Bank Schema
+const BankSchema = new mongoose.Schema({
+  name: String,
+  icon: String,
+  accountType: String,
+  notes: String,
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+// Credit Card Schema
+const CreditCardSchema = new mongoose.Schema({
+  name: String,
+  lastDigits: String,
+  limit: Number,
+  dueDay: Number,
+  notes: String,
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+}, { timestamps: true });
+
+const Bank = mongoose.model('Bank', BankSchema);
+const CreditCard = mongoose.model('CreditCard', CreditCardSchema);
 
 // Auth middleware
 const auth = async (req, res, next) => {
@@ -324,6 +348,35 @@ app.post('/api/transactions', auth, async (req, res) => {
       // Transação parcelada
       console.log('💳 Criando transação parcelada');
       
+      // Criar cartão automaticamente se necessário (antes de criar as parcelas)
+      if (transactionData.creditCard && transactionData.paymentMethod === 'credito') {
+        console.log('💳 Backend - Verificando se cartão existe:', transactionData.creditCard);
+        try {
+          const existingCard = await CreditCard.findOne({ 
+            name: transactionData.creditCard,
+            userId: req.user._id 
+          });
+          
+          if (!existingCard) {
+            console.log('💳 Backend - Criando cartão automaticamente:', transactionData.creditCard);
+            const newCard = new CreditCard({
+              name: transactionData.creditCard,
+              lastDigits: '0000',
+              limit: 1000,
+              dueDay: 10,
+              notes: 'Criado automaticamente via transação parcelada.',
+              userId: req.user._id
+            });
+            await newCard.save();
+            console.log('💳 Backend - Cartão criado com sucesso:', transactionData.creditCard);
+          } else {
+            console.log('💳 Backend - Cartão já existe:', transactionData.creditCard);
+          }
+        } catch (error) {
+          console.error('💳 Backend - Erro ao criar cartão:', error);
+        }
+      }
+      
       const installments = await generateInstallments({
         ...transactionData,
         date: transactionDate
@@ -368,6 +421,36 @@ app.post('/api/transactions', auth, async (req, res) => {
       res.json(savedInstallments[0]); // Retornar a primeira parcela
     } else {
       // Transação normal
+      
+      // Criar cartão automaticamente se necessário
+      if (transactionData.creditCard && transactionData.paymentMethod === 'credito') {
+        console.log('💳 Backend Normal - Verificando se cartão existe:', transactionData.creditCard);
+        try {
+          const existingCard = await CreditCard.findOne({ 
+            name: transactionData.creditCard,
+            userId: req.user._id 
+          });
+          
+          if (!existingCard) {
+            console.log('💳 Backend Normal - Criando cartão automaticamente:', transactionData.creditCard);
+            const newCard = new CreditCard({
+              name: transactionData.creditCard,
+              lastDigits: '0000',
+              limit: 1000,
+              dueDay: 10,
+              notes: 'Criado automaticamente via transação.',
+              userId: req.user._id
+            });
+            await newCard.save();
+            console.log('💳 Backend Normal - Cartão criado com sucesso:', transactionData.creditCard);
+          } else {
+            console.log('💳 Backend Normal - Cartão já existe:', transactionData.creditCard);
+          }
+        } catch (error) {
+          console.error('💳 Backend Normal - Erro ao criar cartão:', error);
+        }
+      }
+      
       const transaction = new Transaction({
         ...transactionData,
         date: transactionDate
@@ -852,6 +935,128 @@ app.post('/api/seed-data', auth, async (req, res) => {
 
     await Transaction.insertMany(sampleTransactions);
     res.json({ message: 'Dados de exemplo criados com sucesso!', count: sampleTransactions.length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// ENDPOINTS PARA CARTÕES DE CRÉDITO
+// ========================================
+
+// Listar cartões de crédito
+app.get('/api/credit-cards', auth, async (req, res) => {
+  try {
+    const creditCards = await CreditCard.find({ userId: req.user._id }).sort({ name: 1 });
+    res.json(creditCards);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Criar cartão de crédito
+app.post('/api/credit-cards', auth, async (req, res) => {
+  try {
+    const creditCard = new CreditCard({
+      ...req.body,
+      userId: req.user._id
+    });
+    await creditCard.save();
+    res.json(creditCard);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Atualizar cartão de crédito
+app.put('/api/credit-cards/:id', auth, async (req, res) => {
+  try {
+    const creditCard = await CreditCard.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      req.body,
+      { new: true }
+    );
+    if (!creditCard) {
+      return res.status(404).json({ error: 'Cartão não encontrado' });
+    }
+    res.json(creditCard);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Deletar cartão de crédito
+app.delete('/api/credit-cards/:id', auth, async (req, res) => {
+  try {
+    const creditCard = await CreditCard.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user._id
+    });
+    if (!creditCard) {
+      return res.status(404).json({ error: 'Cartão não encontrado' });
+    }
+    res.json({ message: 'Cartão deletado com sucesso' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========================================
+// ENDPOINTS PARA BANCOS
+// ========================================
+
+// Listar bancos
+app.get('/api/banks', auth, async (req, res) => {
+  try {
+    const banks = await Bank.find({ userId: req.user._id }).sort({ name: 1 });
+    res.json(banks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Criar banco
+app.post('/api/banks', auth, async (req, res) => {
+  try {
+    const bank = new Bank({
+      ...req.body,
+      userId: req.user._id
+    });
+    await bank.save();
+    res.json(bank);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Atualizar banco
+app.put('/api/banks/:id', auth, async (req, res) => {
+  try {
+    const bank = await Bank.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      req.body,
+      { new: true }
+    );
+    if (!bank) {
+      return res.status(404).json({ error: 'Banco não encontrado' });
+    }
+    res.json(bank);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Deletar banco
+app.delete('/api/banks/:id', auth, async (req, res) => {
+  try {
+    const bank = await Bank.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user._id
+    });
+    if (!bank) {
+      return res.status(404).json({ error: 'Banco não encontrado' });
+    }
+    res.json({ message: 'Banco deletado com sucesso' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

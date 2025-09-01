@@ -145,22 +145,6 @@ const Sidebar = () => {
       <nav className="modern-nav">
         <div className="nav-section">
           <h3 className="nav-section-title">Menu Principal</h3>
-          
-          {/* Botão Nova Transação */}
-          <div className="nav-action-button">
-            <button 
-              className="btn-new-transaction"
-              onClick={() => {
-                // Precisamos acessar o setShowAddModal do componente TransactionsPage
-                // Vamos implementar isso via contexto ou prop drilling
-                window.dispatchEvent(new CustomEvent('openNewTransaction'));
-              }}
-            >
-              <span className="btn-icon">➕</span>
-              <span className="btn-text">Nova Transação</span>
-            </button>
-          </div>
-          
           <ul className="modern-nav-menu">
             {menuItems.map((item) => (
               <li key={item.key} className="modern-nav-item">
@@ -1849,18 +1833,6 @@ const AllTransactionsPage = () => {
 
   useEffect(() => {
     loadTransactions();
-    
-    // Listener para o botão "Nova Transação" da sidebar
-    const handleOpenNewTransaction = () => {
-      setShowAddModal(true);
-    };
-    
-    window.addEventListener('openNewTransaction', handleOpenNewTransaction);
-    
-    // Cleanup
-    return () => {
-      window.removeEventListener('openNewTransaction', handleOpenNewTransaction);
-    };
   }, []);
 
   if (loading) {
@@ -1890,6 +1862,26 @@ const AllTransactionsPage = () => {
           title="Próximo mês"
         >
           ›
+        </button>
+      </div>
+
+      {/* Ações principais */}
+      <div className="page-actions">
+        <button 
+          className="btn-primary-enhanced"
+          onClick={() => setShowAddModal(true)}
+        >
+          <span className="btn-icon">➕</span>
+          Nova Transação
+        </button>
+        
+        <button 
+          className="btn-secondary-enhanced"
+          onClick={() => setShowConfirmDeleteAllModal(true)}
+          disabled={transactions.length === 0}
+        >
+          <span className="btn-icon">🗑️</span>
+          Limpar Mês
         </button>
       </div>
 
@@ -1984,12 +1976,7 @@ const AllTransactionsPage = () => {
                       className="action-btn-enhanced delete"
                       onClick={() => {
                         setTransactionToDelete(transaction);
-                        // Verificar se é uma transação fixa ou parcelada
-                        if (transaction.isRecurring || transaction.recurringParentId || transaction.totalInstallments > 1) {
-                          setShowConfirmDeleteAllModal(true);
-                        } else {
-                          setShowDeleteModal(true);
-                        }
+                        setShowDeleteModal(true);
                       }}
                       title="Excluir transação"
                     >
@@ -2106,15 +2093,15 @@ const AllTransactionsPage = () => {
                 </div>
               )}
             </div>
-            <div className="modal-footer special-delete">
+            <div className="modal-footer">
               <button 
-                className="btn btn-cancel"
+                className="btn-secondary"
                 onClick={() => setShowConfirmDeleteAllModal(false)}
               >
-                ❌ Cancelar
+                Cancelar
               </button>
               <button 
-                className="btn btn-warning"
+                className="btn-warning"
                 onClick={() => {
                   handleDeleteTransaction(false);
                   setShowConfirmDeleteAllModal(false);
@@ -2123,7 +2110,7 @@ const AllTransactionsPage = () => {
                 🗓️ Deletar Apenas Este Mês
               </button>
               <button 
-                className="btn btn-danger"
+                className="btn-danger"
                 onClick={() => {
                   handleDeleteTransaction(true);
                   setShowConfirmDeleteAllModal(false);
@@ -3199,84 +3186,75 @@ const BanksPage = () => {
               ).reduce((sum, t) => sum + t.amount, 0);
               
               return (
-                <div 
-                  key={bank._id} 
-                  className="bank-card-modern"
-                  onClick={() => openBankModal(bank)}
-                >
-                  <div className="bank-card-header">
-                    <div className="bank-card-info">
-                      <div className="bank-icon-name">
-                        <span className="bank-icon">{bank.icon}</span>
-                        <div className="bank-details">
-                          <h3 className="bank-name">{bank.name}</h3>
-                          <span className="account-type">
-                            {bank.accountType === 'corrente' ? 'Conta Corrente' : 
-                             bank.accountType === 'poupanca' ? 'Poupança' : 'Conta Investimento'}
-                          </span>
-                        </div>
+                <div key={bank._id} className="credit-card-simple">
+                  <div 
+                    className="card-content-simple bank-brand"
+                    onClick={() => openBankModal(bank)}
+                  >
+                    <div className="card-header-simple">
+                      <div className="card-info-simple">
+                        <h3 className="card-name-simple">{bank.icon} {bank.name}</h3>
+                        <div className="card-number-simple">{bank.accountType === 'corrente' ? 'Conta Corrente' : bank.accountType === 'poupanca' ? 'Poupança' : 'Conta Investimento'}</div>
                       </div>
-                      <div className="bank-balance-main">
-                        <span className="balance-label">Saldo</span>
-                        <span className={`balance-amount ${balance >= 0 ? 'positive' : 'negative'}`}>
-                          R$ {Math.abs(balance).toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="bank-actions-menu" onClick={(e) => e.stopPropagation()}>
-                      <button 
-                        className="action-btn-modern edit"
-                        onClick={() => {
-                          setSelectedBank(bank);
-                          setShowEditBankModal(true);
-                        }}
-                        title="Editar banco"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        className="action-btn-modern delete"
-                        onClick={() => {
-                          setBankToDelete(bank);
-                          setShowDeleteModal(true);
-                        }}
-                        title="Excluir banco"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                  
-                  <div className="bank-card-stats">
-                    <div className="stats-grid">
-                      <div className="stat-item">
-                        <div className="stat-icon">📈</div>
-                        <div className="stat-info">
-                          <span className="stat-label">Entradas</span>
-                          <span className="stat-value positive">+R$ {incomeThisMonth.toFixed(2)}</span>
-                        </div>
-                      </div>
-                      <div className="stat-item">
-                        <div className="stat-icon">📉</div>
-                        <div className="stat-info">
-                          <span className="stat-label">Saídas</span>
-                          <span className="stat-value negative">-R$ {expenseThisMonth.toFixed(2)}</span>
-                        </div>
+                      <div className="card-actions" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          className="action-btn edit-btn"
+                          onClick={() => {
+                            setSelectedBank(bank);
+                            setShowEditBankModal(true);
+                          }}
+                          title="Editar"
+                        >
+                          ✏️
+                        </button>
+                        <button 
+                          className="action-btn delete-btn"
+                          onClick={() => {
+                            setBankToDelete(bank);
+                            setShowDeleteModal(true);
+                          }}
+                          title="Excluir"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </div>
                     
-                    <div className="bank-card-footer">
-                      <div className="transaction-count">
-                        📊 {transactionCount} transações
+                    <div className="card-stats-simple">
+                      <div className="stats-row-simple">
+                        <div className="stat-simple">
+                          <div className="stat-label-simple">Saldo Atual</div>
+                          <div className={`stat-value-simple ${balance >= 0 ? 'available' : 'expense'}`}>R$ {balance.toFixed(2)}</div>
+                        </div>
+                        <div className="stat-simple">
+                          <div className="stat-label-simple">Mov. Mês</div>
+                          <div className={`stat-value-simple ${monthlyMovement >= 0 ? 'available' : 'expense'}`}>R$ {monthlyMovement.toFixed(2)}</div>
+                        </div>
                       </div>
-                      <div className="click-hint">
-                        👆 Clique para ver extrato
+                      
+                      <div className="stats-row-simple">
+                        <div className="stat-simple">
+                          <div className="stat-label-simple">Entradas</div>
+                          <div className="stat-value-simple available">R$ {incomeThisMonth.toFixed(2)}</div>
+                        </div>
+                        <div className="stat-simple">
+                          <div className="stat-label-simple">Saídas</div>
+                          <div className="stat-value-simple expense">R$ {expenseThisMonth.toFixed(2)}</div>
+                        </div>
+                      </div>
+                      
+                      <div className="card-footer-simple">
+                        <span>🏦 {bank.name}</span>
+                        <span>💰 {bank.accountType}</span>
+                        <span>📊 {transactionCount} transações</span>
+                        <span className="click-hint">Clique para extrato</span>
                       </div>
                     </div>
                   </div>
                 </div>
               );
             })}
+          </div>
           </div>
         ) : (
           <div className="no-banks">
@@ -3350,149 +3328,29 @@ const BanksPage = () => {
         </div>
       )}
 
-      {/* Modal de Transações do Banco - Mesmo Padrão dos Cartões */}
-      {showBankModal && selectedBankForModal && (
-        <div className="modal-overlay card-modal-overlay" onClick={() => setShowBankModal(false)}>
-          <div className="modal-content card-transactions-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>🏦 {selectedBankForModal.name}</h3>
-              <button 
-                className="modal-close"
-                onClick={() => setShowBankModal(false)}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Navegação de Mês */}
-            <div className="month-navigation">
-              <button 
-                className="month-nav-btn prev"
-                onClick={goToPreviousMonth}
-                title="Mês anterior"
-              >
-                ‹
-              </button>
-              <div className="current-month-display">
-                <h4>{getMonthName(currentModalMonth)} {currentModalYear}</h4>
-              </div>
-              <button 
-                className="month-nav-btn next"
-                onClick={goToNextMonth}
-                title="Próximo mês"
-              >
-                ›
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="card-modal-stats">
-                <div className="modal-stat-grid">
-                  <div className="modal-stat-item">
-                    <div className="modal-stat-label">Entradas neste mês</div>
-                    <div className="modal-stat-value income">
-                      R$ {getBankTransactionsByMonth(selectedBankForModal.name, currentModalMonth, currentModalYear)
-                        .filter(t => t.type === 'income')
-                        .reduce((sum, t) => sum + t.amount, 0).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="modal-stat-item">
-                    <div className="modal-stat-label">Saídas neste mês</div>
-                    <div className="modal-stat-value expense">
-                      R$ {getBankTransactionsByMonth(selectedBankForModal.name, currentModalMonth, currentModalYear)
-                        .filter(t => t.type === 'expense')
-                        .reduce((sum, t) => sum + t.amount, 0).toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="modal-stat-item">
-                    <div className="modal-stat-label">Número de transações</div>
-                    <div className="modal-stat-value">
-                      {getBankTransactionsByMonth(selectedBankForModal.name, currentModalMonth, currentModalYear).length}
-                    </div>
-                  </div>
-                  <div className="modal-stat-item">
-                    <div className="modal-stat-label">Saldo do mês</div>
-                    <div className="modal-stat-value">
-                      R$ {(getBankTransactionsByMonth(selectedBankForModal.name, currentModalMonth, currentModalYear)
-                        .reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0)).toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="modal-transactions-list">
-                <h4>📋 Extrato de {getMonthName(currentModalMonth)} {currentModalYear}</h4>
-                {getBankTransactionsByMonth(selectedBankForModal.name, currentModalMonth, currentModalYear).length === 0 ? (
-                  <div className="no-transactions-modal">
-                    <p>📋 Nenhuma transação encontrada para este mês</p>
-                    <p className="hint-text">Use os botões ‹ › para navegar entre os meses</p>
-                  </div>
-                ) : (
-                  <div className="transactions-list-modal">
-                    {getBankTransactionsByMonth(selectedBankForModal.name, currentModalMonth, currentModalYear).map((transaction, index) => {
-                      // Função para obter ícone da categoria
-                      const getCategoryIcon = (category, type) => {
-                        const categoryIcons = {
-                          'alimentacao': '🍽️', 'comida': '🍽️', 'restaurante': '🍽️', 'lanche': '🍿',
-                          'transporte': '🚗', 'combustivel': '⛽', 'uber': '🚕', 'onibus': '🚌',
-                          'saude': '🏥', 'medicina': '💊', 'dentista': '🦷', 'farmacia': '💊',
-                          'educacao': '📚', 'curso': '🎓', 'livro': '📖', 'escola': '🏫',
-                          'lazer': '🎬', 'cinema': '🎬', 'viagem': '✈️', 'festa': '🎉',
-                          'casa': '🏠', 'moradia': '🏠', 'aluguel': '🏠', 'condominio': '🏢',
-                          'trabalho': '💼', 'salario': '💰', 'salário': '💰', 'freelance': '💻',
-                          'investimento': '📈', 'venda': '💵', 'compras': '🛍️', 'shopping': '🛍️',
-                          'outros': '💳', 'diversos': '💳'
-                        };
-                        return categoryIcons[category?.toLowerCase()] || (type === 'income' ? '💰' : '💳');
-                      };
-
-                      return (
-                        <div key={transaction._id || index} className="transaction-item-extract">
-                          <div className="extract-date">
-                            {new Date(transaction.date).toLocaleDateString('pt-BR')}
-                          </div>
-                          <div className="extract-main">
-                            <div className="extract-description">
-                              <div className="description-line">
-                                <strong>{transaction.description}</strong>
-                                {transaction.isInstallment && (
-                                  <span className="installment-badge">
-                                    {transaction.installmentNumber}/{transaction.totalInstallments}
-                                  </span>
-                                )}
-                                {transaction.isFixed && (
-                                  <span className="fixed-badge">FIXA</span>
-                                )}
-                              </div>
-                              <div className="category-line">
-                                {getCategoryIcon(transaction.category, transaction.type)} {transaction.category}
-                                {transaction.paymentMethod === 'credito' && transaction.creditCard && 
-                                  ` • 💳 ${transaction.creditCard}`
-                                }
-                                {transaction.paymentMethod === 'debito' && transaction.bank && 
-                                  ` • 🏦 ${transaction.bank}`
-                                }
-                              </div>
-                              {transaction.notes && (
-                                <div className="notes-line">
-                                  📝 {transaction.notes}
-                                </div>
-                              )}
-                            </div>
-                            <div className="extract-amount">
-                              {transaction.type === 'income' ? '+' : '-'}R$ {transaction.amount?.toFixed(2)}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal de Transações do Banco */}
+      <BankTransactionModal 
+        bank={selectedBankForModal}
+        isOpen={showBankModal}
+        onClose={() => {
+          setShowBankModal(false);
+          setSelectedBankForModal(null);
+        }}
+        currentMonth={currentModalMonth}
+        currentYear={currentModalYear}
+        goToPreviousMonth={goToPreviousMonth}
+        goToNextMonth={goToNextMonth}
+        transactions={transactions}
+        monthNames={monthNames}
+        onDeleteTransaction={(id) => {
+          setDeleteTransactionId(id);
+          setShowConfirmDelete(true);
+        }}
+        showConfirmDelete={showConfirmDelete}
+        deleteTransactionId={deleteTransactionId}
+        handleConfirmDeleteTransaction={handleConfirmDeleteTransaction}
+        handleCancelDelete={handleCancelDelete}
+      />
     </div>
   );
 };
@@ -3681,6 +3539,159 @@ const EditBankModal = ({ bank, onSave, onCancel }) => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+};
+
+//Modal de Transações do Banco
+const BankTransactionModal = ({ bank, isOpen, onClose, currentMonth, currentYear, goToPreviousMonth, goToNextMonth, transactions, monthNames, onDeleteTransaction, showConfirmDelete, deleteTransactionId, handleConfirmDeleteTransaction, handleCancelDelete }) => {
+  if (!isOpen || !bank) return null;
+
+  const currentMonthTransactions = transactions.filter(transaction => {
+    const transactionDate = new Date(transaction.date);
+    const transactionMonth = transactionDate.getMonth();
+    const transactionYear = transactionDate.getFullYear();
+    
+    return transactionMonth === currentMonth && 
+           transactionYear === currentYear && 
+           transaction.bank === bank.name;
+  });
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
+  };
+
+  const categoryIcons = {
+    'alimentacao': '🍽️',
+    'transporte': '🚗',
+    'moradia': '🏠',
+    'saude': '🏥',
+    'educacao': '📚',
+    'lazer': '🎮',
+    'compras': '🛍️',
+    'outros': '📄',
+    'salario': '💰',
+    'freelance': '💼',
+    'investimento': '📈',
+    'presente': '🎁'
+  };
+
+  return (
+    <div className="modal-overlay-focused" onClick={onClose}>
+      <div className="modal-content bank-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>{bank.icon} {bank.name} - Extrato</h2>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="month-navigation">
+          <button className="btn-nav" onClick={goToPreviousMonth}>‹</button>
+          <span className="current-month">{monthNames[currentMonth]} {currentYear}</span>
+          <button className="btn-nav" onClick={goToNextMonth}>›</button>
+        </div>
+
+        <div className="modal-body">
+          <div className="transactions-summary">
+            <h3>Resumo do Mês</h3>
+            <div className="summary-cards">
+              <div className="summary-card income">
+                <span className="label">Entradas</span>
+                <span className="value">
+                  {formatCurrency(currentMonthTransactions
+                    .filter(t => t.type === 'income')
+                    .reduce((sum, t) => sum + t.amount, 0))}
+                </span>
+              </div>
+              <div className="summary-card expense">
+                <span className="label">Saídas</span>
+                <span className="value">
+                  {formatCurrency(currentMonthTransactions
+                    .filter(t => t.type === 'expense')
+                    .reduce((sum, t) => sum + t.amount, 0))}
+                </span>
+              </div>
+              <div className="summary-card balance">
+                <span className="label">Saldo</span>
+                <span className="value">
+                  {formatCurrency(currentMonthTransactions
+                    .reduce((sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0))}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="transactions-list">
+            <h3>Transações ({currentMonthTransactions.length})</h3>
+            
+            {currentMonthTransactions.length === 0 ? (
+              <div className="no-transactions">
+                <p>Nenhuma transação encontrada para este mês.</p>
+              </div>
+            ) : (
+              <div className="transactions-grid">
+                {currentMonthTransactions
+                  .sort((a, b) => new Date(b.date) - new Date(a.date))
+                  .map(transaction => (
+                    <div key={transaction._id} className="transaction-item-extract">
+                      <div className="transaction-info">
+                        <div className="transaction-header">
+                          <span className="transaction-icon">
+                            {categoryIcons[transaction.category] || '📄'}
+                          </span>
+                          <span className="transaction-description">{transaction.description}</span>
+                          <span className={`transaction-amount ${transaction.type}`}>
+                            {transaction.type === 'expense' ? '-' : '+'}{formatCurrency(Math.abs(transaction.amount))}
+                          </span>
+                        </div>
+                        <div className="transaction-details">
+                          <span className="transaction-date">
+                            {new Date(transaction.date).toLocaleDateString('pt-BR')}
+                          </span>
+                          <span className="transaction-category">
+                            {transaction.category}
+                          </span>
+                        </div>
+                      </div>
+                      <button 
+                        className="btn-delete-small" 
+                        onClick={() => onDeleteTransaction(transaction._id)}
+                        title="Deletar transação"
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modal de Confirmação de Exclusão */}
+        {showConfirmDelete && (
+          <div className="modal-overlay-focused">
+            <div className="modal-content modal-small">
+              <div className="modal-header">
+                <h3>⚠️ Confirmar Exclusão</h3>
+              </div>
+              <div className="modal-body">
+                <p>Tem certeza que deseja excluir esta transação?</p>
+                <p className="warning-text">Esta ação não pode ser desfeita.</p>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-cancel" onClick={handleCancelDelete}>
+                  Cancelar
+                </button>
+                <button className="btn btn-danger" onClick={handleConfirmDeleteTransaction}>
+                  🗑️ Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
