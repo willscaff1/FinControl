@@ -1,5 +1,385 @@
 /* 🎨 MODERN FINANCIAL CONTROL STYLES */
 
+/* Estilos para elementos desabilitados */
+.disabled-text {
+  opacity: 0.6;
+  color: #666;
+}
+
+.checkbox-label.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.checkbox-label.disabled input {
+  cursor: not-allowed;
+}
+
+.form-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+  color: #999;
+}
+
+/* Estilos para botões de modal de exclusão */
+.btn-warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+}
+
+.btn-warning:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(245, 158, 11, 0.4);
+}
+
+.delete-options {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 12px;
+  border-left: 4px solid #ef4444;
+}
+
+.delete-options p {
+  margin: 0.5rem 0;
+}
+
+.delete-options strong {
+  color: #dc2626;
+}
+
+/* Estilos para seleção de bancos e cartões */
+.form-group select {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  width: 100%;
+}
+
+.form-group select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  outline: none;
+}
+
+.form-group select option {
+  padding: 8px 12px;
+  background: white;
+}
+
+.form-group select optgroup {
+  font-weight: 600;
+  color: #374151;
+  background: #f3f4f6;
+  padding: 8px 12px;
+}
+
+.form-group select optgroup option {
+  font-weight: 400;
+  padding-left: 20px;
+  background: white;
+}
+
+/* Estilos para páginas de Bancos e Cartões */
+.page-header {
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid rgba(102, 126, 234, 0.1);
+}
+
+.page-title {
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 0;
+}
+
+/* Grid de Bancos */
+.banks-container {
+  width: 100%;
+}
+
+.banks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.bank-card {
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.bank-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.bank-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.bank-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #1f2937;
+}
+
+.bank-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bank-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bank-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.balance-label {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.balance-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.balance-value.positive {
+  color: #10b981;
+}
+
+.balance-value.negative {
+  color: #ef4444;
+}
+
+.bank-stats {
+  text-align: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Grid de Cartões */
+.cards-container {
+  width: 100%;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.credit-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  padding: 1.5rem;
+  color: white;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.credit-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+  pointer-events: none;
+}
+
+.credit-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 40px rgba(102, 126, 234, 0.3);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+  position: relative;
+  z-index: 2;
+}
+
+.card-info h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+}
+
+.card-number {
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.card-actions .action-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.card-actions .action-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.card-body {
+  position: relative;
+  z-index: 2;
+}
+
+.card-balance {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.card-balance .balance-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.card-balance .balance-label {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.card-balance .balance-value {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.card-balance .balance-value.expense {
+  color: #fbbf24;
+}
+
+.usage-bar {
+  margin: 1rem 0;
+}
+
+.usage-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.9;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+.progress-fill.normal {
+  background: #10b981;
+}
+
+.progress-fill.warning {
+  background: #f59e0b;
+}
+
+.progress-fill.danger {
+  background: #ef4444;
+}
+
+.card-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
+.card-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+/* Estado vazio */
+.no-banks, .no-cards {
+  text-align: center;
+  padding: 3rem;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 16px;
+  border: 2px dashed rgba(102, 126, 234, 0.3);
+}
+
+.no-banks h3, .no-cards h3 {
+  font-size: 1.5rem;
+  color: #6b7280;
+  margin-bottom: 1rem;
+}
+
+.no-banks p, .no-cards p {
+  color: #9ca3af;
+  margin-bottom: 1.5rem;
+}
+
+/* Previews nos modais */
+.bank-preview, .card-preview {
+  padding: 1rem;
+  background: #f3f4f6;
+  border-radius: 8px;
+  margin: 1rem 0;
+  text-align: center;
+}
+
+.card-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 /* 🏗️ LAYOUT PRINCIPAL MODERNO */
 .modern-sidebar {
   width: 320px;

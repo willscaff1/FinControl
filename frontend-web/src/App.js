@@ -360,7 +360,9 @@ const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
     paymentMethod: transaction.paymentMethod || 'pix',
     isInstallment: transaction.isInstallment || !!transaction.installmentParentId,
     installmentNumber: transaction.installmentNumber || 1,
-    totalInstallments: transaction.totalInstallments || 2
+    totalInstallments: transaction.totalInstallments || 2,
+    bank: transaction.bank || '',
+    creditCard: transaction.creditCard || ''
   });
   
   const [showUpdateAllModal, setShowUpdateAllModal] = useState(false);
@@ -538,6 +540,105 @@ const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
                 </div>
               </div>
 
+              {/* Campo Banco (para débito e PIX) */}
+              {(formData.paymentMethod === 'debito' || formData.paymentMethod === 'pix') && (
+                <div className="form-group">
+                  <label>Banco *</label>
+                  <select
+                    name="bank"
+                    value={formData.bank || ''}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Selecione o banco</option>
+                    <option value="Banco do Brasil">🟨 Banco do Brasil</option>
+                    <option value="Bradesco">🔴 Bradesco</option>
+                    <option value="Caixa Econômica">🔵 Caixa Econômica Federal</option>
+                    <option value="Itaú">🟠 Itaú Unibanco</option>
+                    <option value="Santander">🔴 Santander</option>
+                    <option value="Nubank">🟣 Nubank</option>
+                    <option value="Inter">🟠 Banco Inter</option>
+                    <option value="C6 Bank">⚫ C6 Bank</option>
+                    <option value="XP Investimentos">🟡 XP Investimentos</option>
+                    <option value="BTG Pactual">🔵 BTG Pactual</option>
+                    <option value="Next">🟢 Next (Bradesco)</option>
+                    <option value="Neon">🟢 Neon</option>
+                    <option value="PagBank">🔵 PagBank</option>
+                    <option value="Picpay">🟢 PicPay</option>
+                    <option value="99Pay">🟡 99Pay</option>
+                    <option value="Mercado Pago">🔵 Mercado Pago</option>
+                    <option value="Stone">🟦 Stone</option>
+                    <option value="Outros">📱 Outros</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Campo Cartão (para crédito) */}
+              {formData.paymentMethod === 'credito' && (
+                <div className="form-group">
+                  <label>Cartão de Crédito *</label>
+                  <select
+                    name="creditCard"
+                    value={formData.creditCard || ''}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Selecione o cartão</option>
+                    <optgroup label="🟨 Banco do Brasil">
+                      <option value="BB Visa">BB Visa</option>
+                      <option value="BB Mastercard">BB Mastercard</option>
+                      <option value="BB Elo">BB Elo</option>
+                    </optgroup>
+                    <optgroup label="🔴 Bradesco">
+                      <option value="Bradesco Visa">Bradesco Visa</option>
+                      <option value="Bradesco Mastercard">Bradesco Mastercard</option>
+                      <option value="Bradesco Elo">Bradesco Elo</option>
+                    </optgroup>
+                    <optgroup label="🔵 Caixa Econômica">
+                      <option value="Caixa Visa">Caixa Visa</option>
+                      <option value="Caixa Mastercard">Caixa Mastercard</option>
+                      <option value="Caixa Elo">Caixa Elo</option>
+                    </optgroup>
+                    <optgroup label="🟠 Itaú">
+                      <option value="Itaú Visa">Itaú Visa</option>
+                      <option value="Itaú Mastercard">Itaú Mastercard</option>
+                      <option value="Itaú Elo">Itaú Elo</option>
+                    </optgroup>
+                    <optgroup label="🔴 Santander">
+                      <option value="Santander Visa">Santander Visa</option>
+                      <option value="Santander Mastercard">Santander Mastercard</option>
+                    </optgroup>
+                    <optgroup label="🟣 Nubank">
+                      <option value="Nubank Mastercard">Nubank Mastercard</option>
+                    </optgroup>
+                    <optgroup label="🟠 Inter">
+                      <option value="Inter Mastercard">Inter Mastercard</option>
+                      <option value="Inter Visa">Inter Visa</option>
+                    </optgroup>
+                    <optgroup label="⚫ C6 Bank">
+                      <option value="C6 Mastercard">C6 Mastercard</option>
+                    </optgroup>
+                    <optgroup label="🔵 BTG Pactual">
+                      <option value="BTG Black">BTG Black</option>
+                      <option value="BTG Mastercard">BTG Mastercard</option>
+                    </optgroup>
+                    <optgroup label="🟢 Next">
+                      <option value="Next Mastercard">Next Mastercard</option>
+                    </optgroup>
+                    <optgroup label="🔵 PagBank">
+                      <option value="PagBank Visa">PagBank Visa</option>
+                    </optgroup>
+                    <optgroup label="🟢 PicPay">
+                      <option value="PicPay Visa">PicPay Visa</option>
+                    </optgroup>
+                    <optgroup label="🔵 Mercado Pago">
+                      <option value="Mercado Pago Mastercard">Mercado Pago Mastercard</option>
+                    </optgroup>
+                    <option value="Outros">💳 Outros</option>
+                  </select>
+                </div>
+              )}
+
               <div className="form-row">
                 {/* 4. DESCRIÇÃO */}
                 <div className="form-group">
@@ -612,30 +713,39 @@ const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
                       // Se ativar recorrente, desativar parcelamento
                       isInstallment: e.target.checked ? false : prev.isInstallment
                     }))}
-                    disabled={transaction.recurringParentId || transaction.isRecurring}
-                    style={{ opacity: (transaction.recurringParentId || transaction.isRecurring) ? 0.5 : 1 }}
+                    disabled={transaction.recurringParentId || transaction.isRecurring || (transaction.installmentParentId || transaction.installmentNumber > 0)}
+                    style={{ opacity: (transaction.recurringParentId || transaction.isRecurring || (transaction.installmentParentId || transaction.installmentNumber > 0)) ? 0.5 : 1 }}
                   />
-                  <span className="checkbox-text">Transação Fixa (repete todos os meses)</span>
+                  <span className={`checkbox-text ${(transaction.installmentParentId || transaction.installmentNumber > 0) ? 'disabled-text' : ''}`}>
+                    Transação Fixa (repete todos os meses)
+                  </span>
                 </label>
               </div>
 
               {/* 7. PARCELAMENTO */}
               <div className="form-group">
-                <label className={`checkbox-label ${formData.isRecurring ? 'disabled' : ''}`}>
+                <label className={`checkbox-label ${formData.isRecurring || (transaction.installmentParentId || transaction.installmentNumber > 0) ? 'disabled' : ''}`}>
                   <input
                     type="checkbox"
                     name="isInstallment"
                     checked={formData.isInstallment}
-                    disabled={formData.isRecurring}
+                    disabled={formData.isRecurring || (transaction.installmentParentId || transaction.installmentNumber > 0)}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
                       isInstallment: e.target.checked,
                       // Se ativar parcelamento e estiver no PIX, mudar para débito
                       paymentMethod: (e.target.checked && prev.paymentMethod === 'pix') ? 'debito' : prev.paymentMethod
                     }))}
-                    style={{ opacity: formData.isRecurring ? 0.5 : 1 }}
+                    style={{ opacity: (formData.isRecurring || (transaction.installmentParentId || transaction.installmentNumber > 0)) ? 0.5 : 1 }}
                   />
-                  <span className="checkbox-text">Parcelado (crédito/débito apenas)</span>
+                  <span className={`checkbox-text ${(transaction.installmentParentId || transaction.installmentNumber > 0) ? 'disabled-text' : ''}`}>
+                    Parcelado (crédito/débito apenas)
+                    {transaction.installmentNumber > 0 && (
+                      <small style={{ display: 'block', opacity: 0.7, marginTop: '2px' }}>
+                        Parcela {transaction.installmentNumber} de {transaction.totalInstallments}
+                      </small>
+                    )}
+                  </span>
                 </label>
               </div>
 
@@ -650,13 +760,20 @@ const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
                     min="2"
                     max="60"
                     value={formData.totalInstallments}
+                    disabled={transaction.installmentParentId || transaction.installmentNumber > 0}
+                    style={{ opacity: (transaction.installmentParentId || transaction.installmentNumber > 0) ? 0.5 : 1 }}
                     onChange={(e) => setFormData(prev => ({
                       ...prev,
                       totalInstallments: parseInt(e.target.value) || 2
                     }))}
                     required
                   />
-                  <small className="helper-text">De 2 a 60 parcelas</small>
+                  <small className="helper-text">
+                    {(transaction.installmentParentId || transaction.installmentNumber > 0) 
+                      ? `Parcela fixa: ${transaction.totalInstallments} parcelas` 
+                      : 'De 2 a 60 parcelas'
+                    }
+                  </small>
                 </div>
               )}
             </div>
@@ -728,7 +845,9 @@ const AddTransactionModal = ({ onSave, onCancel }) => {
     isRecurring: false,
     isInstallment: false,
     installmentNumber: 1,
-    totalInstallments: 2
+    totalInstallments: 2,
+    bank: '',
+    creditCard: ''
   });
 
   const handleSubmit = (e) => {
@@ -881,6 +1000,105 @@ const AddTransactionModal = ({ onSave, onCancel }) => {
                 </button>
               </div>
             </div>
+
+            {/* Campo Banco (para débito e PIX) */}
+            {(formData.paymentMethod === 'debito' || formData.paymentMethod === 'pix') && (
+              <div className="form-group">
+                <label>Banco *</label>
+                <select
+                  name="bank"
+                  value={formData.bank}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Selecione o banco</option>
+                  <option value="Banco do Brasil">🟨 Banco do Brasil</option>
+                  <option value="Bradesco">🔴 Bradesco</option>
+                  <option value="Caixa Econômica">🔵 Caixa Econômica Federal</option>
+                  <option value="Itaú">🟠 Itaú Unibanco</option>
+                  <option value="Santander">🔴 Santander</option>
+                  <option value="Nubank">🟣 Nubank</option>
+                  <option value="Inter">🟠 Banco Inter</option>
+                  <option value="C6 Bank">⚫ C6 Bank</option>
+                  <option value="XP Investimentos">🟡 XP Investimentos</option>
+                  <option value="BTG Pactual">🔵 BTG Pactual</option>
+                  <option value="Next">🟢 Next (Bradesco)</option>
+                  <option value="Neon">🟢 Neon</option>
+                  <option value="PagBank">🔵 PagBank</option>
+                  <option value="Picpay">🟢 PicPay</option>
+                  <option value="99Pay">🟡 99Pay</option>
+                  <option value="Mercado Pago">🔵 Mercado Pago</option>
+                  <option value="Stone">🟦 Stone</option>
+                  <option value="Outros">📱 Outros</option>
+                </select>
+              </div>
+            )}
+
+            {/* Campo Cartão (para crédito) */}
+            {formData.paymentMethod === 'credito' && (
+              <div className="form-group">
+                <label>Cartão de Crédito *</label>
+                <select
+                  name="creditCard"
+                  value={formData.creditCard}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Selecione o cartão</option>
+                  <optgroup label="🟨 Banco do Brasil">
+                    <option value="BB Visa">BB Visa</option>
+                    <option value="BB Mastercard">BB Mastercard</option>
+                    <option value="BB Elo">BB Elo</option>
+                  </optgroup>
+                  <optgroup label="🔴 Bradesco">
+                    <option value="Bradesco Visa">Bradesco Visa</option>
+                    <option value="Bradesco Mastercard">Bradesco Mastercard</option>
+                    <option value="Bradesco Elo">Bradesco Elo</option>
+                  </optgroup>
+                  <optgroup label="🔵 Caixa Econômica">
+                    <option value="Caixa Visa">Caixa Visa</option>
+                    <option value="Caixa Mastercard">Caixa Mastercard</option>
+                    <option value="Caixa Elo">Caixa Elo</option>
+                  </optgroup>
+                  <optgroup label="🟠 Itaú">
+                    <option value="Itaú Visa">Itaú Visa</option>
+                    <option value="Itaú Mastercard">Itaú Mastercard</option>
+                    <option value="Itaú Elo">Itaú Elo</option>
+                  </optgroup>
+                  <optgroup label="🔴 Santander">
+                    <option value="Santander Visa">Santander Visa</option>
+                    <option value="Santander Mastercard">Santander Mastercard</option>
+                  </optgroup>
+                  <optgroup label="🟣 Nubank">
+                    <option value="Nubank Mastercard">Nubank Mastercard</option>
+                  </optgroup>
+                  <optgroup label="🟠 Inter">
+                    <option value="Inter Mastercard">Inter Mastercard</option>
+                    <option value="Inter Visa">Inter Visa</option>
+                  </optgroup>
+                  <optgroup label="⚫ C6 Bank">
+                    <option value="C6 Mastercard">C6 Mastercard</option>
+                  </optgroup>
+                  <optgroup label="🔵 BTG Pactual">
+                    <option value="BTG Black">BTG Black</option>
+                    <option value="BTG Mastercard">BTG Mastercard</option>
+                  </optgroup>
+                  <optgroup label="🟢 Next">
+                    <option value="Next Mastercard">Next Mastercard</option>
+                  </optgroup>
+                  <optgroup label="🔵 PagBank">
+                    <option value="PagBank Visa">PagBank Visa</option>
+                  </optgroup>
+                  <optgroup label="🟢 PicPay">
+                    <option value="PicPay Visa">PicPay Visa</option>
+                  </optgroup>
+                  <optgroup label="🔵 Mercado Pago">
+                    <option value="Mercado Pago Mastercard">Mercado Pago Mastercard</option>
+                  </optgroup>
+                  <option value="Outros">💳 Outros</option>
+                </select>
+              </div>
+            )}
 
             <div className="form-row">
               {/* 4. DESCRIÇÃO */}
@@ -1406,7 +1624,14 @@ const AllTransactionsPage = () => {
                       className="action-btn delete-btn"
                       onClick={() => {
                         setTransactionToDelete(transaction);
-                        setShowDeleteModal(true);
+                        // Se for transação fixa ou parcelada, mostra modal de confirmação especial
+                        if (transaction.isRecurring || transaction.recurringParentId || 
+                            transaction.isInstallment || transaction.installmentParentId || 
+                            transaction.installmentNumber > 0) {
+                          setShowConfirmDeleteAllModal(true);
+                        } else {
+                          setShowDeleteModal(true);
+                        }
                       }}
                       title="Excluir"
                     >
@@ -1481,6 +1706,79 @@ const AllTransactionsPage = () => {
         </div>
       )}
 
+      {/* Modal de confirmação especial para transações fixas/parceladas */}
+      {showConfirmDeleteAllModal && transactionToDelete && (
+        <div className="modal-overlay" onClick={() => setShowConfirmDeleteAllModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>
+                {transactionToDelete.isRecurring || transactionToDelete.recurringParentId 
+                  ? '🔄 Deletar Transação Fixa' 
+                  : '💳 Deletar Parcelamento'
+                }
+              </h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowConfirmDeleteAllModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="transaction-preview">
+                <strong>{transactionToDelete.description}</strong>
+                <span className={`amount ${transactionToDelete.type}`}>
+                  {transactionToDelete.type === 'income' ? '+' : '-'}R$ {(transactionToDelete.amount || 0).toFixed(2)}
+                </span>
+                {transactionToDelete.installmentNumber > 0 && (
+                  <small style={{ display: 'block', marginTop: '5px', opacity: 0.7 }}>
+                    Parcela {transactionToDelete.installmentNumber} de {transactionToDelete.totalInstallments}
+                  </small>
+                )}
+              </div>
+              
+              {transactionToDelete.isRecurring || transactionToDelete.recurringParentId ? (
+                <div className="delete-options">
+                  <p><strong>Esta é uma transação fixa.</strong></p>
+                  <p>O que deseja fazer?</p>
+                </div>
+              ) : (
+                <div className="delete-options">
+                  <p><strong>Esta é uma transação parcelada.</strong></p>
+                  <p>O que deseja fazer?</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowConfirmDeleteAllModal(false)}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-warning"
+                onClick={() => {
+                  handleDeleteTransaction(false);
+                  setShowConfirmDeleteAllModal(false);
+                }}
+              >
+                🗓️ Deletar Apenas Este Mês
+              </button>
+              <button 
+                className="btn-danger"
+                onClick={() => {
+                  handleDeleteTransaction(true);
+                  setShowConfirmDeleteAllModal(false);
+                }}
+              >
+                🗑️ Deletar {transactionToDelete.isRecurring || transactionToDelete.recurringParentId ? 'Todos os Meses' : 'Todas as Parcelas'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* FAB - Floating Action Button */}
       <button 
         className="fab"
@@ -1495,291 +1793,961 @@ const AllTransactionsPage = () => {
 
 // Página Cartões
 const CreditCardPage = () => {
+  const [creditCards, setCreditCards] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  const [creditTransactions, setCreditTransactions] = useState([]);
-  const [totalCreditAmount, setTotalCreditAmount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [showAddCardModal, setShowAddCardModal] = useState(false);
+  const [showEditCardModal, setShowEditCardModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedCard, setSelectedCard] = useState(null);
+  const [cardToDelete, setCardToDelete] = useState(null);
 
-  const loadTransactions = async (month = selectedMonth, year = selectedYear) => {
+  // Carregar cartões e transações
+  const loadData = async () => {
     try {
-      const response = await axios.get(`/transactions?month=${month}&year=${year}`);
-      const allTransactions = response.data || [];
-      setTransactions(allTransactions);
-      
-      // Filtrar apenas transações de crédito
-      const creditOnly = allTransactions.filter(t => 
-        t && t.type === 'expense' && t.paymentMethod === 'credito'
-      );
-      setCreditTransactions(creditOnly);
-      
-      // Calcular total do cartão de crédito
-      const total = creditOnly.reduce((sum, t) => sum + (t.amount || 0), 0);
-      setTotalCreditAmount(total);
+      // Carregar cartões cadastrados
+      const cardsResponse = await axios.get('/credit-cards');
+      setCreditCards(cardsResponse.data || []);
+
+      // Carregar transações para calcular gastos
+      const transactionsResponse = await axios.get('/transactions');
+      setTransactions(transactionsResponse.data || []);
       
     } catch (error) {
-      console.error('Erro ao carregar transações:', error);
+      console.error('Erro ao carregar dados:', error);
+      setCreditCards([]);
       setTransactions([]);
-      setCreditTransactions([]);
-      setTotalCreditAmount(0);
     } finally {
       setLoading(false);
     }
   };
 
-  const changeMonth = (direction) => {
-    let newMonth = selectedMonth + direction;
-    let newYear = selectedYear;
+  // Calcular gastos de um cartão baseado nas transações
+  const calculateCardExpenses = (cardName) => {
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
     
-    if (newMonth > 12) {
-      newMonth = 1;
-      newYear++;
-    } else if (newMonth < 1) {
-      newMonth = 12;
-      newYear--;
-    }
+    const cardTransactions = transactions.filter(t => 
+      t.creditCard === cardName && 
+      t.paymentMethod === 'credito' &&
+      new Date(t.date).getMonth() + 1 === currentMonth &&
+      new Date(t.date).getFullYear() === currentYear
+    );
     
-    setSelectedMonth(newMonth);
-    setSelectedYear(newYear);
-    loadTransactions(newMonth, newYear);
+    return cardTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
   };
 
-  const getMonthName = (month) => {
-    const months = [
-      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-    ];
-    return months[month - 1];
+  // Adicionar novo cartão
+  const handleAddCard = async (cardData) => {
+    try {
+      await axios.post('/credit-cards', cardData);
+      setShowAddCardModal(false);
+      loadData();
+      alert('Cartão adicionado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao adicionar cartão:', error);
+      alert('Erro ao adicionar cartão');
+    }
+  };
+
+  // Editar cartão
+  const handleEditCard = async (cardData) => {
+    try {
+      await axios.put(`/credit-cards/${selectedCard._id}`, cardData);
+      setShowEditCardModal(false);
+      setSelectedCard(null);
+      loadData();
+      alert('Cartão atualizado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao editar cartão:', error);
+      alert('Erro ao editar cartão');
+    }
+  };
+
+  // Deletar cartão
+  const handleDeleteCard = async () => {
+    try {
+      // Verificar se há transações vinculadas
+      const cardTransactions = transactions.filter(t => t.creditCard === cardToDelete.name);
+      if (cardTransactions.length > 0) {
+        alert(`Não é possível deletar este cartão. Existem ${cardTransactions.length} transação(ões) vinculada(s) a ele.`);
+        return;
+      }
+
+      await axios.delete(`/credit-cards/${cardToDelete._id}`);
+      setShowDeleteModal(false);
+      setCardToDelete(null);
+      loadData();
+      alert('Cartão deletado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao deletar cartão:', error);
+      alert('Erro ao deletar cartão');
+    }
+  };
+
+  // Calcular percentual usado do limite
+  const calculateUsagePercentage = (expenses, limit) => {
+    if (!limit || limit <= 0) return 0;
+    return Math.min((expenses / limit) * 100, 100);
+  };
+
+  // Formatar data de vencimento
+  const formatDueDate = (day) => {
+    const currentMonth = new Date().getMonth() + 1;
+    const currentYear = new Date().getFullYear();
+    return `${String(day).padStart(2, '0')}/${String(currentMonth).padStart(2, '0')}/${currentYear}`;
   };
 
   useEffect(() => {
-    loadTransactions();
+    loadData();
   }, []);
 
   if (loading) {
-    return <div className="page loading">Carregando gastos do cartão...</div>;
+    return <div className="page loading">Carregando cartões...</div>;
   }
 
   return (
     <div className="page">
-      <div className="month-selector">
+      <div className="page-header">
+        <h1 className="page-title">💳 Meus Cartões</h1>
         <button 
-          className="month-nav-btn"
-          onClick={() => changeMonth(-1)}
+          className="btn btn-primary"
+          onClick={() => setShowAddCardModal(true)}
         >
-          ←
-        </button>
-        <div className="month-display">
-          <h2>💳 Cartões - {getMonthName(selectedMonth)} {selectedYear}</h2>
-          <div className="credit-total">
-            Total: R$ {totalCreditAmount.toFixed(2)}
-          </div>
-        </div>
-        <button 
-          className="month-nav-btn"
-          onClick={() => changeMonth(1)}
-        >
-          →
+          + Adicionar Cartão
         </button>
       </div>
 
-      <div className="transactions-container">
-        <div className="transactions-list">
-          {creditTransactions && creditTransactions.length > 0 ? (
-            creditTransactions.map((transaction) => {
-              // Ícones baseados na categoria
-              const getIconForCategory = (category) => {
-                const categoryIcons = {
-                  'alimentacao': '🍕', 'alimentação': '🍕', 'comida': '🍕', 'restaurante': '🍽️',
-                  'transporte': '🚗', 'combustivel': '⛽', 'combustível': '⛽', 'uber': '🚕',
-                  'saude': '🏥', 'saúde': '🏥', 'farmacia': '💊', 'farmácia': '💊',
-                  'casa': '🏠', 'mercado': '🛒', 'supermercado': '🛒',
-                  'educacao': '📚', 'educação': '📚', 'curso': '🎓',
-                  'lazer': '🎮', 'cinema': '🎬', 'streaming': '📺', 'netflix': '📺',
-                  'roupas': '👕', 'roupa': '👕', 'shopping': '🛍️',
-                  'servicos': '🔧', 'serviços': '🔧', 'manutencao': '🔧', 'manutenção': '🔧',
-                  'assinatura': '📱', 'software': '💻', 'app': '📱',
-                  'viagem': '✈️', 'hotel': '🏨', 'passagem': '🎫',
-                  'presente': '🎁', 'gift': '🎁',
-                  'outros': '📦'
-                };
-                return categoryIcons[category?.toLowerCase()] || '💳';
-              };
-
+      <div className="cards-container">
+        {creditCards.length > 0 ? (
+          <div className="cards-grid">
+            {creditCards.map((card) => {
+              const expenses = calculateCardExpenses(card.name);
+              const usagePercentage = calculateUsagePercentage(expenses, card.limit);
+              const transactionCount = transactions.filter(t => t.creditCard === card.name).length;
+              
               return (
-                <div key={transaction._id} className="transaction-item">
-                  <div className="transaction-info">
-                    <div className="transaction-icon-modern">
-                      {getIconForCategory(transaction.category)}
+                <div key={card._id} className="credit-card">
+                  <div className="card-header">
+                    <div className="card-info">
+                      <h3>{card.name}</h3>
+                      <span className="card-number">**** {card.lastDigits}</span>
                     </div>
-                    <div className="transaction-details">
-                      <h4>{transaction.description}</h4>
-                      <small>
-                        {transaction.category} • Cartão de Crédito • {new Date(transaction.date).toLocaleDateString('pt-BR')}
-                      </small>
+                    <div className="card-actions">
+                      <button 
+                        className="action-btn edit-btn"
+                        onClick={() => {
+                          setSelectedCard(card);
+                          setShowEditCardModal(true);
+                        }}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        className="action-btn delete-btn"
+                        onClick={() => {
+                          setCardToDelete(card);
+                          setShowDeleteModal(true);
+                        }}
+                        title="Excluir"
+                      >
+                        🗑️
+                      </button>
                     </div>
                   </div>
-                  <div className="transaction-right">
-                    <div className={`transaction-amount ${transaction.type}`}>
-                      -R$ {(transaction.amount || 0).toFixed(2)}
+                  
+                  <div className="card-body">
+                    <div className="card-balance">
+                      <div className="balance-info">
+                        <span className="balance-label">Gasto este mês:</span>
+                        <span className="balance-value expense">
+                          R$ {expenses.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="balance-info">
+                        <span className="balance-label">Limite:</span>
+                        <span className="balance-value">
+                          R$ {card.limit?.toFixed(2) || '0,00'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {card.limit > 0 && (
+                      <div className="usage-bar">
+                        <div className="usage-label">
+                          <span>Limite usado</span>
+                          <span>{usagePercentage.toFixed(1)}%</span>
+                        </div>
+                        <div className="progress-bar">
+                          <div 
+                            className={`progress-fill ${usagePercentage > 80 ? 'danger' : usagePercentage > 60 ? 'warning' : 'normal'}`}
+                            style={{ width: `${usagePercentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="card-footer">
+                      <div className="card-details">
+                        <span>🗓️ Vence dia {card.dueDay}</span>
+                        <span>📊 {transactionCount} transação(ões)</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               );
-            })
-          ) : (
-            <div className="no-transactions">
-              <p>💳 Nenhum gasto no cartão este mês</p>
+            })}
+          </div>
+        ) : (
+          <div className="no-cards">
+            <h3>💳 Nenhum cartão cadastrado</h3>
+            <p>Adicione seus cartões para controlar seus gastos</p>
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowAddCardModal(true)}
+            >
+              + Adicionar Primeiro Cartão
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Modais */}
+      {showAddCardModal && (
+        <AddCreditCardModal 
+          onSave={handleAddCard}
+          onCancel={() => setShowAddCardModal(false)}
+        />
+      )}
+
+      {showEditCardModal && selectedCard && (
+        <EditCreditCardModal 
+          card={selectedCard}
+          onSave={handleEditCard}
+          onCancel={() => {
+            setShowEditCardModal(false);
+            setSelectedCard(null);
+          }}
+        />
+      )}
+
+      {showDeleteModal && cardToDelete && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirmar Exclusão</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                ×
+              </button>
             </div>
-          )}
+            <div className="modal-body">
+              <p>Tem certeza que deseja deletar este cartão?</p>
+              <div className="card-preview">
+                <strong>{cardToDelete.name}</strong>
+                <span>**** {cardToDelete.lastDigits}</span>
+              </div>
+              <small style={{ color: '#666', marginTop: '10px', display: 'block' }}>
+                ⚠️ Só é possível deletar cartões sem transações vinculadas
+              </small>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-danger"
+                onClick={handleDeleteCard}
+              >
+                🗑️ Deletar
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+    </div>
+  );
+};
+
+// Modal para Adicionar Cartão de Crédito
+const AddCreditCardModal = ({ onSave, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    lastDigits: '',
+    limit: '',
+    dueDay: '',
+    notes: ''
+  });
+
+  const cardOptions = [
+    { name: 'BB Visa', bank: 'Banco do Brasil' },
+    { name: 'BB Mastercard', bank: 'Banco do Brasil' },
+    { name: 'BB Elo', bank: 'Banco do Brasil' },
+    { name: 'Bradesco Visa', bank: 'Bradesco' },
+    { name: 'Bradesco Mastercard', bank: 'Bradesco' },
+    { name: 'Bradesco Elo', bank: 'Bradesco' },
+    { name: 'Caixa Visa', bank: 'Caixa Econômica' },
+    { name: 'Caixa Mastercard', bank: 'Caixa Econômica' },
+    { name: 'Caixa Elo', bank: 'Caixa Econômica' },
+    { name: 'Itaú Visa', bank: 'Itaú' },
+    { name: 'Itaú Mastercard', bank: 'Itaú' },
+    { name: 'Itaú Elo', bank: 'Itaú' },
+    { name: 'Santander Visa', bank: 'Santander' },
+    { name: 'Santander Mastercard', bank: 'Santander' },
+    { name: 'Nubank Mastercard', bank: 'Nubank' },
+    { name: 'Inter Mastercard', bank: 'Inter' },
+    { name: 'Inter Visa', bank: 'Inter' },
+    { name: 'C6 Mastercard', bank: 'C6 Bank' },
+    { name: 'BTG Black', bank: 'BTG Pactual' },
+    { name: 'BTG Mastercard', bank: 'BTG Pactual' },
+    { name: 'Next Mastercard', bank: 'Next' },
+    { name: 'PagBank Visa', bank: 'PagBank' },
+    { name: 'PicPay Visa', bank: 'PicPay' },
+    { name: 'Mercado Pago Mastercard', bank: 'Mercado Pago' },
+    { name: 'Outros', bank: 'Outros' }
+  ];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.lastDigits) {
+      alert('Por favor, preencha os campos obrigatórios');
+      return;
+    }
+
+    const cardData = {
+      ...formData,
+      limit: parseFloat(formData.limit) || 0,
+      dueDay: parseInt(formData.dueDay) || 10
+    };
+
+    onSave(cardData);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Adicionar Novo Cartão</h3>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Cartão *</label>
+              <select
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                required
+              >
+                <option value="">Selecione o cartão</option>
+                {cardOptions.map(card => (
+                  <option key={card.name} value={card.name}>
+                    {card.name} ({card.bank})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>4 Últimos Dígitos *</label>
+                <input
+                  type="text"
+                  value={formData.lastDigits}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setFormData(prev => ({ ...prev, lastDigits: value }));
+                  }}
+                  placeholder="0000"
+                  maxLength="4"
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Dia do Vencimento</label>
+                <input
+                  type="number"
+                  value={formData.dueDay}
+                  onChange={(e) => setFormData(prev => ({ ...prev, dueDay: e.target.value }))}
+                  min="1"
+                  max="31"
+                  placeholder="10"
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Limite (R$)</label>
+              <input
+                type="number"
+                value={formData.limit}
+                onChange={(e) => setFormData(prev => ({ ...prev, limit: e.target.value }))}
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Observações</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Ex: Cartão principal, cartão de emergência, etc."
+                rows="3"
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-cancel" onClick={onCancel}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn-success">
+              💾 Adicionar Cartão
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
 };
 
-// Página Bancos
-const BanksPage = () => {
-  const [transactions, setTransactions] = useState([]);
-  const [bankTransactions, setBankTransactions] = useState([]);
-  const [totalBankAmount, setTotalBankAmount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+// Modal para Editar Cartão de Crédito
+const EditCreditCardModal = ({ card, onSave, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: card.name || '',
+    lastDigits: card.lastDigits || '',
+    limit: card.limit || '',
+    dueDay: card.dueDay || '',
+    notes: card.notes || ''
+  });
 
-  const loadTransactions = async (month = selectedMonth, year = selectedYear) => {
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.lastDigits) {
+      alert('Por favor, preencha os campos obrigatórios');
+      return;
+    }
+
+    const cardData = {
+      ...formData,
+      limit: parseFloat(formData.limit) || 0,
+      dueDay: parseInt(formData.dueDay) || 10
+    };
+
+    onSave(cardData);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Editar Cartão</h3>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Nome do Cartão *</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                required
+              />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>4 Últimos Dígitos *</label>
+                <input
+                  type="text"
+                  value={formData.lastDigits}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                    setFormData(prev => ({ ...prev, lastDigits: value }));
+                  }}
+                  placeholder="0000"
+                  maxLength="4"
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Dia do Vencimento</label>
+                <input
+                  type="number"
+                  value={formData.dueDay}
+                  onChange={(e) => setFormData(prev => ({ ...prev, dueDay: e.target.value }))}
+                  min="1"
+                  max="31"
+                  placeholder="10"
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Limite (R$)</label>
+              <input
+                type="number"
+                value={formData.limit}
+                onChange={(e) => setFormData(prev => ({ ...prev, limit: e.target.value }))}
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Observações</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Ex: Cartão principal, cartão de emergência, etc."
+                rows="3"
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-cancel" onClick={onCancel}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn-success">
+              💾 Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+  const [banks, setBanks] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddBankModal, setShowAddBankModal] = useState(false);
+  const [showEditBankModal, setShowEditBankModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedBank, setSelectedBank] = useState(null);
+  const [bankToDelete, setBankToDelete] = useState(null);
+
+  // Carregar bancos e transações
+  const loadData = async () => {
     try {
-      const response = await axios.get(`/transactions?month=${month}&year=${year}`);
-      const allTransactions = response.data || [];
-      setTransactions(allTransactions);
-      
-      // Filtrar apenas transações de débito e PIX
-      const bankOnly = allTransactions.filter(t => 
-        t && t.type === 'expense' && (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
-      );
-      setBankTransactions(bankOnly);
-      
-      // Calcular total dos bancos (débito + PIX)
-      const total = bankOnly.reduce((sum, t) => sum + (t.amount || 0), 0);
-      setTotalBankAmount(total);
+      // Carregar bancos cadastrados
+      const banksResponse = await axios.get('/banks');
+      setBanks(banksResponse.data || []);
+
+      // Carregar transações para calcular saldos
+      const transactionsResponse = await axios.get('/transactions');
+      setTransactions(transactionsResponse.data || []);
       
     } catch (error) {
-      console.error('Erro ao carregar transações:', error);
+      console.error('Erro ao carregar dados:', error);
+      setBanks([]);
       setTransactions([]);
-      setBankTransactions([]);
-      setTotalBankAmount(0);
     } finally {
       setLoading(false);
     }
   };
 
-  const changeMonth = (direction) => {
-    let newMonth = selectedMonth + direction;
-    let newYear = selectedYear;
-    
-    if (newMonth > 12) {
-      newMonth = 1;
-      newYear++;
-    } else if (newMonth < 1) {
-      newMonth = 12;
-      newYear--;
-    }
-    
-    setSelectedMonth(newMonth);
-    setSelectedYear(newYear);
-    loadTransactions(newMonth, newYear);
+  // Calcular saldo de um banco baseado nas transações
+  const calculateBankBalance = (bankName) => {
+    const bankTransactions = transactions.filter(t => t.bank === bankName);
+    return bankTransactions.reduce((sum, t) => {
+      if (t.type === 'income') {
+        return sum + (t.amount || 0);
+      } else {
+        return sum - (t.amount || 0);
+      }
+    }, 0);
   };
 
-  const getMonthName = (month) => {
-    const months = [
-      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-    ];
-    return months[month - 1];
+  // Adicionar novo banco
+  const handleAddBank = async (bankData) => {
+    try {
+      await axios.post('/banks', bankData);
+      setShowAddBankModal(false);
+      loadData();
+      alert('Banco adicionado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao adicionar banco:', error);
+      alert('Erro ao adicionar banco');
+    }
+  };
+
+  // Editar banco
+  const handleEditBank = async (bankData) => {
+    try {
+      await axios.put(`/banks/${selectedBank._id}`, bankData);
+      setShowEditBankModal(false);
+      setSelectedBank(null);
+      loadData();
+      alert('Banco atualizado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao editar banco:', error);
+      alert('Erro ao editar banco');
+    }
+  };
+
+  // Deletar banco
+  const handleDeleteBank = async () => {
+    try {
+      // Verificar se há transações vinculadas
+      const bankTransactions = transactions.filter(t => t.bank === bankToDelete.name);
+      if (bankTransactions.length > 0) {
+        alert(`Não é possível deletar este banco. Existem ${bankTransactions.length} transação(ões) vinculada(s) a ele.`);
+        return;
+      }
+
+      await axios.delete(`/banks/${bankToDelete._id}`);
+      setShowDeleteModal(false);
+      setBankToDelete(null);
+      loadData();
+      alert('Banco deletado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao deletar banco:', error);
+      alert('Erro ao deletar banco');
+    }
   };
 
   useEffect(() => {
-    loadTransactions();
+    loadData();
   }, []);
 
   if (loading) {
-    return <div className="page loading">Carregando movimentações bancárias...</div>;
+    return <div className="page loading">Carregando bancos...</div>;
   }
 
   return (
     <div className="page">
-      <div className="month-selector">
+      <div className="page-header">
+        <h1 className="page-title">🏦 Meus Bancos</h1>
         <button 
-          className="month-nav-btn"
-          onClick={() => changeMonth(-1)}
+          className="btn btn-primary"
+          onClick={() => setShowAddBankModal(true)}
         >
-          ←
-        </button>
-        <div className="month-display">
-          <h2>🏦 Bancos - {getMonthName(selectedMonth)} {selectedYear}</h2>
-          <div className="credit-total">
-            Total: R$ {totalBankAmount.toFixed(2)}
-          </div>
-        </div>
-        <button 
-          className="month-nav-btn"
-          onClick={() => changeMonth(1)}
-        >
-          →
+          + Adicionar Banco
         </button>
       </div>
 
-      <div className="transactions-container">
-        <div className="transactions-list">
-          {bankTransactions && bankTransactions.length > 0 ? (
-            bankTransactions.map((transaction) => {
-              // Ícones baseados na categoria
-              const getIconForCategory = (category, paymentMethod) => {
-                if (paymentMethod === 'pix') return '📱';
-                if (paymentMethod === 'debito') return '💳';
-                
-                const categoryIcons = {
-                  'alimentacao': '🍕', 'alimentação': '🍕', 'comida': '🍕',
-                  'transporte': '🚗', 'combustivel': '⛽', 'combustível': '⛽',
-                  'saude': '🏥', 'saúde': '🏥', 'farmacia': '💊',
-                  'casa': '🏠', 'mercado': '🛒', 'supermercado': '🛒',
-                  'educacao': '📚', 'educação': '📚',
-                  'lazer': '🎮', 'cinema': '🎬', 'streaming': '📺',
-                  'roupas': '👕', 'roupa': '👕',
-                  'servicos': '🔧', 'serviços': '🔧',
-                  'outros': '📦'
-                };
-                return categoryIcons[category?.toLowerCase()] || '💰';
-              };
-
+      <div className="banks-container">
+        {banks.length > 0 ? (
+          <div className="banks-grid">
+            {banks.map((bank) => {
+              const balance = calculateBankBalance(bank.name);
+              const transactionCount = transactions.filter(t => t.bank === bank.name).length;
+              
               return (
-                <div key={transaction._id} className="transaction-item">
-                  <div className="transaction-info">
-                    <div className="transaction-icon-modern">
-                      {getIconForCategory(transaction.category, transaction.paymentMethod)}
-                    </div>
-                    <div className="transaction-details">
-                      <h4>{transaction.description}</h4>
-                      <small>
-                        {transaction.category} • {transaction.paymentMethod === 'pix' ? 'PIX' : 'Débito'} • {new Date(transaction.date).toLocaleDateString('pt-BR')}
-                      </small>
+                <div key={bank._id} className="bank-card">
+                  <div className="bank-header">
+                    <h3>{bank.icon} {bank.name}</h3>
+                    <div className="bank-actions">
+                      <button 
+                        className="action-btn edit-btn"
+                        onClick={() => {
+                          setSelectedBank(bank);
+                          setShowEditBankModal(true);
+                        }}
+                        title="Editar"
+                      >
+                        ✏️
+                      </button>
+                      <button 
+                        className="action-btn delete-btn"
+                        onClick={() => {
+                          setBankToDelete(bank);
+                          setShowDeleteModal(true);
+                        }}
+                        title="Excluir"
+                      >
+                        �️
+                      </button>
                     </div>
                   </div>
-                  <div className="transaction-right">
-                    <div className={`transaction-amount ${transaction.type}`}>
-                      -R$ {(transaction.amount || 0).toFixed(2)}
+                  
+                  <div className="bank-info">
+                    <div className="bank-balance">
+                      <span className="balance-label">Saldo:</span>
+                      <span className={`balance-value ${balance >= 0 ? 'positive' : 'negative'}`}>
+                        R$ {balance.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="bank-stats">
+                      <small>{transactionCount} transação(ões)</small>
                     </div>
                   </div>
                 </div>
               );
-            })
-          ) : (
-            <div className="no-transactions">
-              <p>🏦 Nenhuma movimentação bancária este mês</p>
+            })}
+          </div>
+        ) : (
+          <div className="no-banks">
+            <h3>🏦 Nenhum banco cadastrado</h3>
+            <p>Adicione seus bancos para começar a organizar suas finanças</p>
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowAddBankModal(true)}
+            >
+              + Adicionar Primeiro Banco
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Modais */}
+      {showAddBankModal && (
+        <AddBankModal 
+          onSave={handleAddBank}
+          onCancel={() => setShowAddBankModal(false)}
+        />
+      )}
+
+      {showEditBankModal && selectedBank && (
+        <EditBankModal 
+          bank={selectedBank}
+          onSave={handleEditBank}
+          onCancel={() => {
+            setShowEditBankModal(false);
+            setSelectedBank(null);
+          }}
+        />
+      )}
+
+      {showDeleteModal && bankToDelete && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirmar Exclusão</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                ×
+              </button>
             </div>
-          )}
+            <div className="modal-body">
+              <p>Tem certeza que deseja deletar este banco?</p>
+              <div className="bank-preview">
+                <strong>{bankToDelete.icon} {bankToDelete.name}</strong>
+              </div>
+              <small style={{ color: '#666', marginTop: '10px', display: 'block' }}>
+                ⚠️ Só é possível deletar bancos sem transações vinculadas
+              </small>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-danger"
+                onClick={handleDeleteBank}
+              >
+                🗑️ Deletar
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+    </div>
+  );
+};
+
+// Modal para Adicionar Banco
+const AddBankModal = ({ onSave, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    icon: '🏦',
+    accountType: 'corrente',
+    notes: ''
+  });
+
+  const bankOptions = [
+    { name: 'Banco do Brasil', icon: '🟨' },
+    { name: 'Bradesco', icon: '🔴' },
+    { name: 'Caixa Econômica', icon: '🔵' },
+    { name: 'Itaú', icon: '🟠' },
+    { name: 'Santander', icon: '🔴' },
+    { name: 'Nubank', icon: '🟣' },
+    { name: 'Inter', icon: '🟠' },
+    { name: 'C6 Bank', icon: '⚫' },
+    { name: 'XP Investimentos', icon: '🟡' },
+    { name: 'BTG Pactual', icon: '🔵' },
+    { name: 'Next', icon: '🟢' },
+    { name: 'Neon', icon: '🟢' },
+    { name: 'PagBank', icon: '🔵' },
+    { name: 'Picpay', icon: '🟢' },
+    { name: '99Pay', icon: '🟡' },
+    { name: 'Mercado Pago', icon: '🔵' },
+    { name: 'Stone', icon: '🟦' },
+    { name: 'Outros', icon: '📱' }
+  ];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.name) {
+      alert('Por favor, selecione um banco');
+      return;
+    }
+
+    onSave(formData);
+  };
+
+  const handleBankSelect = (e) => {
+    const selectedBank = bankOptions.find(bank => bank.name === e.target.value);
+    setFormData(prev => ({
+      ...prev,
+      name: selectedBank?.name || '',
+      icon: selectedBank?.icon || '🏦'
+    }));
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Adicionar Novo Banco</h3>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Banco *</label>
+              <select
+                value={formData.name}
+                onChange={handleBankSelect}
+                required
+              >
+                <option value="">Selecione o banco</option>
+                {bankOptions.map(bank => (
+                  <option key={bank.name} value={bank.name}>
+                    {bank.icon} {bank.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Tipo de Conta</label>
+              <select
+                value={formData.accountType}
+                onChange={(e) => setFormData(prev => ({ ...prev, accountType: e.target.value }))}
+              >
+                <option value="corrente">Conta Corrente</option>
+                <option value="poupanca">Poupança</option>
+                <option value="investimento">Conta Investimento</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Observações</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Ex: Conta principal, conta salário, etc."
+                rows="3"
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-cancel" onClick={onCancel}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn-success">
+              💾 Adicionar Banco
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Modal para Editar Banco
+const EditBankModal = ({ bank, onSave, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: bank.name || '',
+    icon: bank.icon || '🏦',
+    accountType: bank.accountType || 'corrente',
+    notes: bank.notes || ''
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.name) {
+      alert('Por favor, preencha o nome do banco');
+      return;
+    }
+
+    onSave(formData);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Editar Banco</h3>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Nome do Banco *</label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                required
+                readOnly
+                style={{ opacity: 0.7, cursor: 'not-allowed' }}
+              />
+              <small className="helper-text">O nome do banco não pode ser alterado</small>
+            </div>
+
+            <div className="form-group">
+              <label>Tipo de Conta</label>
+              <select
+                value={formData.accountType}
+                onChange={(e) => setFormData(prev => ({ ...prev, accountType: e.target.value }))}
+              >
+                <option value="corrente">Conta Corrente</option>
+                <option value="poupanca">Poupança</option>
+                <option value="investimento">Conta Investimento</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Observações</label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Ex: Conta principal, conta salário, etc."
+                rows="3"
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-cancel" onClick={onCancel}>
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn-success">
+              💾 Salvar Alterações
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
