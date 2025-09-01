@@ -543,12 +543,11 @@ const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
               {/* Campo Banco (para débito e PIX) */}
               {(formData.paymentMethod === 'debito' || formData.paymentMethod === 'pix') && (
                 <div className="form-group">
-                  <label>Banco *</label>
+                  <label>Banco</label>
                   <select
                     name="bank"
                     value={formData.bank || ''}
                     onChange={handleChange}
-                    required
                   >
                     <option value="">Selecione o banco</option>
                     <option value="Banco do Brasil">🟨 Banco do Brasil</option>
@@ -576,12 +575,11 @@ const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
               {/* Campo Cartão (para crédito) */}
               {formData.paymentMethod === 'credito' && (
                 <div className="form-group">
-                  <label>Cartão de Crédito *</label>
+                  <label>Cartão de Crédito</label>
                   <select
                     name="creditCard"
                     value={formData.creditCard || ''}
                     onChange={handleChange}
-                    required
                   >
                     <option value="">Selecione o cartão</option>
                     <optgroup label="🟨 Banco do Brasil">
@@ -1270,6 +1268,78 @@ const DashboardPage = () => {
 
   const handleAddTransaction = async (transactionData) => {
     try {
+      // Criar banco automaticamente se selecionado
+      if (transactionData.bank && (transactionData.paymentMethod === 'debito' || transactionData.paymentMethod === 'pix')) {
+        try {
+          // Verificar se o banco já existe
+          const existingBanks = await axios.get('/banks');
+          const bankExists = existingBanks.data.some(bank => bank.name === transactionData.bank);
+          
+          if (!bankExists) {
+            // Criar novo banco
+            const bankOptions = [
+              { name: 'Banco do Brasil', icon: '🟨' },
+              { name: 'Bradesco', icon: '🔴' },
+              { name: 'Caixa Econômica', icon: '🔵' },
+              { name: 'Itaú', icon: '🟠' },
+              { name: 'Santander', icon: '🔴' },
+              { name: 'Nubank', icon: '🟣' },
+              { name: 'Inter', icon: '🟠' },
+              { name: 'C6 Bank', icon: '⚫' },
+              { name: 'XP Investimentos', icon: '🟡' },
+              { name: 'BTG Pactual', icon: '🔵' },
+              { name: 'Next', icon: '🟢' },
+              { name: 'Neon', icon: '🟢' },
+              { name: 'PagBank', icon: '🔵' },
+              { name: 'Picpay', icon: '🟢' },
+              { name: '99Pay', icon: '🟡' },
+              { name: 'Mercado Pago', icon: '🔵' },
+              { name: 'Stone', icon: '🟦' },
+              { name: 'Outros', icon: '📱' }
+            ];
+            
+            const bankData = bankOptions.find(bank => bank.name === transactionData.bank);
+            const newBank = {
+              name: transactionData.bank,
+              icon: bankData?.icon || '🏦',
+              accountType: 'corrente',
+              notes: 'Criado automaticamente via transação'
+            };
+            
+            await axios.post('/banks', newBank);
+            console.log(`Banco ${transactionData.bank} criado automaticamente`);
+          }
+        } catch (error) {
+          console.error('Erro ao criar banco automaticamente:', error);
+        }
+      }
+
+      // Criar cartão automaticamente se selecionado
+      if (transactionData.creditCard && transactionData.paymentMethod === 'credito') {
+        try {
+          // Verificar se o cartão já existe
+          const existingCards = await axios.get('/credit-cards');
+          const cardExists = existingCards.data.some(card => card.name === transactionData.creditCard);
+          
+          if (!cardExists) {
+            // Criar novo cartão
+            const newCard = {
+              name: transactionData.creditCard,
+              lastDigits: '0000', // Valor padrão - usuário pode editar depois
+              limit: 1000, // Limite padrão - usuário pode editar depois
+              dueDay: 10, // Dia padrão - usuário pode editar depois
+              notes: 'Criado automaticamente via transação. Edite os dados do cartão.'
+            };
+            
+            await axios.post('/credit-cards', newCard);
+            console.log(`Cartão ${transactionData.creditCard} criado automaticamente`);
+          }
+        } catch (error) {
+          console.error('Erro ao criar cartão automaticamente:', error);
+        }
+      }
+
+      // Criar a transação
       const response = await axios.post('/transactions', transactionData);
       
       setShowAddModal(false);
@@ -1459,6 +1529,78 @@ const AllTransactionsPage = () => {
 
   const handleAddTransaction = async (transactionData) => {
     try {
+      // Criar banco automaticamente se selecionado
+      if (transactionData.bank && (transactionData.paymentMethod === 'debito' || transactionData.paymentMethod === 'pix')) {
+        try {
+          // Verificar se o banco já existe
+          const existingBanks = await axios.get('/banks');
+          const bankExists = existingBanks.data.some(bank => bank.name === transactionData.bank);
+          
+          if (!bankExists) {
+            // Criar novo banco
+            const bankOptions = [
+              { name: 'Banco do Brasil', icon: '🟨' },
+              { name: 'Bradesco', icon: '🔴' },
+              { name: 'Caixa Econômica', icon: '🔵' },
+              { name: 'Itaú', icon: '🟠' },
+              { name: 'Santander', icon: '🔴' },
+              { name: 'Nubank', icon: '🟣' },
+              { name: 'Inter', icon: '🟠' },
+              { name: 'C6 Bank', icon: '⚫' },
+              { name: 'XP Investimentos', icon: '🟡' },
+              { name: 'BTG Pactual', icon: '🔵' },
+              { name: 'Next', icon: '🟢' },
+              { name: 'Neon', icon: '🟢' },
+              { name: 'PagBank', icon: '🔵' },
+              { name: 'Picpay', icon: '🟢' },
+              { name: '99Pay', icon: '🟡' },
+              { name: 'Mercado Pago', icon: '🔵' },
+              { name: 'Stone', icon: '🟦' },
+              { name: 'Outros', icon: '📱' }
+            ];
+            
+            const bankData = bankOptions.find(bank => bank.name === transactionData.bank);
+            const newBank = {
+              name: transactionData.bank,
+              icon: bankData?.icon || '🏦',
+              accountType: 'corrente',
+              notes: 'Criado automaticamente via transação'
+            };
+            
+            await axios.post('/banks', newBank);
+            console.log(`Banco ${transactionData.bank} criado automaticamente`);
+          }
+        } catch (error) {
+          console.error('Erro ao criar banco automaticamente:', error);
+        }
+      }
+
+      // Criar cartão automaticamente se selecionado
+      if (transactionData.creditCard && transactionData.paymentMethod === 'credito') {
+        try {
+          // Verificar se o cartão já existe
+          const existingCards = await axios.get('/credit-cards');
+          const cardExists = existingCards.data.some(card => card.name === transactionData.creditCard);
+          
+          if (!cardExists) {
+            // Criar novo cartão
+            const newCard = {
+              name: transactionData.creditCard,
+              lastDigits: '0000', // Valor padrão - usuário pode editar depois
+              limit: 1000, // Limite padrão - usuário pode editar depois
+              dueDay: 10, // Dia padrão - usuário pode editar depois
+              notes: 'Criado automaticamente via transação. Edite os dados do cartão.'
+            };
+            
+            await axios.post('/credit-cards', newCard);
+            console.log(`Cartão ${transactionData.creditCard} criado automaticamente`);
+          }
+        } catch (error) {
+          console.error('Erro ao criar cartão automaticamente:', error);
+        }
+      }
+
+      // Criar a transação
       await axios.post('/transactions', transactionData);
       setShowAddModal(false);
       alert('Transação adicionada com sucesso!');
