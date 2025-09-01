@@ -3,7 +3,7 @@
 <div align="center">
 
 ![FinControl Logo](https://img.shields.io/badge/FinControl-💎-blue?style=for-the-badge)
-![Version](https://img.shields.io/badge/version-1.0.0-green?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.0-green?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge)
 
 **Sistema completo de controle financeiro pessoal com interface moderna**
@@ -17,6 +17,23 @@
 ## 🌟 **Visão Geral**
 
 O **FinControl** é um sistema completo de gestão financeira pessoal que oferece controle total sobre suas finanças através de uma interface moderna e intuitiva. Com suporte a múltiplas plataformas (Web, Mobile) e funcionalidades avançadas como transações recorrentes, parcelamento e categorização automática.
+
+### ✨ **Novidades v2.0.0 - Setembro 2025**
+
+🎨 **Interface Completamente Redesenhada**
+- Cards de banco com layout moderno e maior legibilidade
+- Toda área do card clicável para melhor experiência
+- Padronização entre modais de bancos e cartões
+
+🧭 **Navegação Aprimorada**
+- Botão "Nova Transação" movido para sidebar (sempre acessível)
+- Remoção do botão "Limpar Mês" para interface mais limpa
+- Comunicação inteligente entre componentes
+
+🗑️ **Sistema de Exclusão Inteligente**
+- Detecção automática de transações recorrentes/parceladas
+- Opções contextuais de exclusão (só este mês, todas as parcelas, etc.)
+- Interface melhorada para confirmação de ações
 
 ### 🎯 **Principais Diferenciais**
 
