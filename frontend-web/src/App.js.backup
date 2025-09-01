@@ -1,0 +1,1915 @@
+import React, { useState, useEffect, createContext, useContext } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
+import axios from 'axios';
+import './styles.css';
+
+// Configuração da API
+const API_URL = 'http://localhost:3001/api';
+
+// Configurar interceptador do Axios
+axios.defaults.baseURL = API_URL;
+axios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Interceptador de resposta para lidar com tokens expirados
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Context de autenticação
+const AuthContext = createContext();
+const useAuth = () => useContext(AuthContext);
+
+// Provider de autenticação
+const AuthProvider = ({ children }) => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const login = async (email, password) => {
+    try {
+      const response = await axios.post('/auth/login', { email, password });
+      const { token, user } = response.data;
+      
+      localStorage.setItem('token', token);
+      setIsAuthenticated(true);
+      setUser(user);
+      return { success: true };
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error.response?.data?.message || 'Erro no login' 
+      };
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setIsAuthenticated(false);
+    setUser(null);
+  };
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          // Verificar se o token é válido fazendo uma requisição ao backend
+          const response = await axios.get('/user/me');
+          setIsAuthenticated(true);
+          setUser(response.data.user);
+        } catch (error) {
+          // Token inválido, remover do localStorage
+          localStorage.removeItem('token');
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        fontSize: '18px'
+      }}>
+        Carregando...
+      </div>
+    );
+  }
+
+  return (
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Componente para rotas protegidas
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? children : <Navigate to="/login" />;
+};
+
+// Sidebar Component
+const Sidebar = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, logout } = useAuth();
+
+  const menuItems = [
+    { key: 'dashboard', label: 'Dashboard', icon: '📊', path: '/dashboard' },
+    { key: 'all-transactions', label: 'Transações', icon: '📊', path: '/all-transactions' },
+    { key: 'transactions', label: 'Cartões', icon: '💳', path: '/transactions' },
+    { key: 'banks', label: 'Bancos', icon: '🏦', path: '/banks' },
+    { key: 'settings', label: 'Configurações', icon: '⚙️', path: '/settings' }
+  ];
+
+  return (
+    <div className="sidebar">
+      <div className="sidebar-header">
+        <div className="logo">💰</div>
+        <h1 className="app-title">FinControl</h1>
+        <p className="app-subtitle">Controle Financeiro</p>
+      </div>
+      
+      <nav className="sidebar-nav">
+        <ul className="nav-menu">
+          {menuItems.map((item) => (
+            <li key={item.key} className="nav-item">
+              <Link
+                to={item.path}
+                className={`nav-link ${location.pathname === item.path ? 'active' : ''}`}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div className="sidebar-user">
+        <div className="user-info">
+          <div className="user-avatar">
+            {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+          </div>
+          <div className="user-details">
+            <h4>{user?.name || 'Usuário'}</h4>
+            <p>{user?.email || 'usuario@email.com'}</p>
+          </div>
+        </div>
+        <button className="logout-btn" onClick={logout}>
+          🚪 Sair
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Página de Login
+const LoginPage = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const result = await login(email, password);
+    
+    if (result.success) {
+      navigate('/dashboard');
+    } else {
+      setError(result.error);
+    }
+    
+    setLoading(false);
+  };
+
+  return (
+    <div className="login-container">
+      <div className="login-form">
+        <h2>🔐 Login - FinControl</h2>
+        
+        {error && <div className="error-message">{error}</div>}
+        
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Email:</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          
+          <div className="form-group">
+            <label>Senha:</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          
+          <button type="submit" disabled={loading}>
+            {loading ? 'Entrando...' : 'Entrar'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Página Dashboard
+const DashboardPage = () => {
+  const [data, setData] = useState({
+    stats: {
+      balance: 0,
+      income: 0,
+      expense: 0
+    },
+    recentTransactions: []
+  });
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const loadData = async (month = selectedMonth, year = selectedYear) => {
+    try {
+      const response = await axios.get(`/dashboard?month=${month}&year=${year}`);
+      setData(response.data || {
+        stats: { balance: 0, income: 0, expense: 0 },
+        recentTransactions: []
+      });
+    } catch (error) {
+      console.error('Erro ao carregar dashboard:', error);
+      setData({
+        stats: { balance: 0, income: 0, expense: 0 },
+        recentTransactions: []
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddTransaction = async (transactionData) => {
+    try {
+      const response = await axios.post('/transactions', transactionData);
+      
+      setShowAddModal(false);
+      alert('Transação adicionada com sucesso!');
+      
+      // Recarregar dados do dashboard
+      loadData();
+    } catch (error) {
+      console.error('Erro ao adicionar transação:', error);
+      alert('Erro ao adicionar transação');
+    }
+  };
+
+  const changeMonth = (direction) => {
+    let newMonth = selectedMonth + direction;
+    let newYear = selectedYear;
+    
+    if (newMonth > 12) {
+      newMonth = 1;
+      newYear++;
+    } else if (newMonth < 1) {
+      newMonth = 12;
+      newYear--;
+    }
+    
+    setSelectedMonth(newMonth);
+    setSelectedYear(newYear);
+    loadData(newMonth, newYear);
+  };
+
+  const getMonthName = (month) => {
+    const months = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return months[month - 1];
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (loading) {
+    return <div className="page loading">Carregando dashboard...</div>;
+  }
+
+  return (
+    <div className="page">
+      <div className="month-selector">
+        <button 
+          className="month-nav-btn"
+          onClick={() => changeMonth(-1)}
+        >
+          ←
+        </button>
+        <div className="month-display">
+          <h2>{getMonthName(selectedMonth)} {selectedYear}</h2>
+        </div>
+        <button 
+          className="month-nav-btn"
+          onClick={() => changeMonth(1)}
+        >
+          →
+        </button>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stats-row">
+          <div className="stat-card balance">
+            <div className="stat-header">
+              <div className="stat-title">Saldo Atual</div>
+              <div className="stat-icon">💰</div>
+            </div>
+            <div className={`stat-value ${(data.stats?.balance ?? 0) >= 0 ? 'positive' : 'negative'}`}>
+              R$ {(data.stats?.balance ?? 0).toFixed(2)}
+            </div>
+          </div>
+          
+          <div className="stat-card transactions">
+            <div className="stat-header">
+              <div className="stat-title">💳 Cartão Crédito</div>
+              <div className="stat-icon">💳</div>
+            </div>
+            <div className="stat-value primary">R$ {(data.creditCardTotal ?? 0).toFixed(2)}</div>
+          </div>
+        </div>
+        
+        <div className="stats-row">
+          <div className="stat-card income">
+            <div className="stat-header">
+              <div className="stat-title">Receitas</div>
+              <div className="stat-icon">�</div>
+            </div>
+            <div className="stat-value positive">R$ {(data.stats?.income ?? 0).toFixed(2)}</div>
+          </div>
+          
+          <div className="stat-card expense">
+            <div className="stat-header">
+              <div className="stat-title">Despesas</div>
+              <div className="stat-icon">�</div>
+            </div>
+            <div className="stat-value negative">R$ {(data.stats?.expense ?? 0).toFixed(2)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="recent-transactions">
+        <div className="transactions-container">
+          <div className="transactions-header">
+            <h3>Transações Recentes</h3>
+          </div>
+          <div className="transactions-list">
+            {data.recentTransactions && data.recentTransactions.length > 0 ? (
+              data.recentTransactions.slice(0, 5).map((transaction) => (
+                <div key={transaction._id} className="transaction-item">
+                  <div className="transaction-info">
+                    <div className={`transaction-icon ${transaction.type}`}>
+                      {transaction.type === 'income' ? '+' : '-'}
+                    </div>
+                    <div className="transaction-details">
+                      <h4>{transaction.description}</h4>
+                      <small>{transaction.category} • {new Date(transaction.date).toLocaleDateString('pt-BR')}</small>
+                    </div>
+                  </div>
+                  <div className={`transaction-amount ${transaction.type}`}>
+                    {transaction.type === 'income' ? '+' : '-'}R$ {(transaction.amount || 0).toFixed(2)}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="no-transactions">
+                <p>Nenhuma transação encontrada</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal de Nova Transação */}
+      {showAddModal && (
+        <AddTransactionModal
+          onSave={handleAddTransaction}
+          onCancel={() => setShowAddModal(false)}
+        />
+      )}
+
+      {/* FAB - Floating Action Button */}
+      <button 
+        className="fab"
+        onClick={() => setShowAddModal(true)}
+        title="Adicionar Nova Transação"
+      >
+        +
+      </button>
+    </div>
+  );
+};
+
+// 📊 TODAS AS TRANSAÇÕES PAGE
+const AllTransactionsPage = () => {
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [transactionToDelete, setTransactionToDelete] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const loadTransactions = async (month = selectedMonth, year = selectedYear) => {
+    try {
+      const response = await axios.get(`/transactions?month=${month}&year=${year}`);
+      const allTransactions = response.data || [];
+      
+      // TODAS as transações, sem filtro
+      setTransactions(allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)));
+      
+    } catch (error) {
+      console.error('Erro ao carregar transações:', error);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddTransaction = async (transactionData) => {
+    try {
+      await axios.post('/transactions', transactionData);
+      setShowAddModal(false);
+      alert('Transação adicionada com sucesso!');
+      loadTransactions();
+    } catch (error) {
+      console.error('Erro ao adicionar transação:', error);
+      alert('Erro ao adicionar transação');
+    }
+  };
+
+  const handleEditTransaction = async (transactionData) => {
+    try {
+      await axios.put(`/transactions/${editingTransaction._id}`, transactionData);
+      setShowEditModal(false);
+      setEditingTransaction(null);
+      alert('Transação editada com sucesso!');
+      loadTransactions();
+    } catch (error) {
+      console.error('Erro ao editar transação:', error);
+      alert('Erro ao editar transação');
+    }
+  };
+
+  const handleDeleteTransaction = async () => {
+    try {
+      await axios.delete(`/transactions/${transactionToDelete._id}`);
+      setShowDeleteModal(false);
+      setTransactionToDelete(null);
+      alert('Transação excluída com sucesso!');
+      loadTransactions();
+    } catch (error) {
+      console.error('Erro ao excluir transação:', error);
+      alert('Erro ao excluir transação');
+    }
+  };
+
+  const changeMonth = (direction) => {
+    let newMonth = selectedMonth + direction;
+    let newYear = selectedYear;
+    
+    if (newMonth > 12) {
+      newMonth = 1;
+      newYear++;
+    } else if (newMonth < 1) {
+      newMonth = 12;
+      newYear--;
+    }
+    
+    setSelectedMonth(newMonth);
+    setSelectedYear(newYear);
+    loadTransactions(newMonth, newYear);
+  };
+
+  const getMonthName = (month) => {
+    const months = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return months[month - 1];
+  };
+
+  useEffect(() => {
+    loadTransactions();
+  }, []);
+
+  if (loading) {
+    return <div className="page loading">Carregando transações...</div>;
+  }
+
+  return (
+    <div className="page">
+      {/* 🎯 HEADER COM NAVEGAÇÃO DE MÊS */}
+      <div className="transactions-page-header">
+        <div className="page-title">
+          <h1>� Todas as Transações</h1>
+          <p>Gerencie suas receitas e despesas</p>
+        </div>
+        
+        <div className="month-navigation">
+          <button 
+            className="month-btn prev"
+            onClick={() => changeMonth(-1)}
+            title="Mês anterior"
+          >
+            <span>←</span>
+          </button>
+          <div className="current-month">
+            <span className="month-name">{getMonthName(selectedMonth)}</span>
+            <span className="year">{selectedYear}</span>
+          </div>
+          <button 
+            className="month-btn next"
+            onClick={() => changeMonth(1)}
+            title="Próximo mês"
+          >
+            <span>→</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="transactions-header">
+        <div className="transactions-summary">
+          <div className="summary-item">
+            <span className="summary-label">Total</span>
+            <span className="summary-value">{transactions.length}</span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Receitas</span>
+            <span className="summary-value positive">
+              {transactions.filter(t => t.type === 'income').length}
+            </span>
+          </div>
+          <div className="summary-item">
+            <span className="summary-label">Despesas</span>
+            <span className="summary-value negative">
+              {transactions.filter(t => t.type === 'expense').length}
+            </span>
+          </div>
+        </div>
+        <button 
+          className="btn-primary"
+          onClick={() => setShowAddModal(true)}
+        >
+          <span className="btn-icon">+</span>
+          Nova Transação
+        </button>
+      </div>
+
+      <div className="transactions-container">
+        <div className="transactions-list">
+        {transactions.length === 0 ? (
+            <div className="no-transactions">
+              <p>📝 Nenhuma transação encontrada este mês</p>
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowAddModal(true)}
+              >
+                Adicionar transação
+              </button>
+            </div>
+        ) : (
+          transactions.map(transaction => (
+            <div key={transaction._id} className="transaction-item">
+                <div className="transaction-header">
+                  <div className="transaction-type-badge">
+                    <span className={`type-icon ${transaction.type}`}>
+                      {transaction.type === 'income' ? '💰' : '�'}
+                    </span>
+                    <span className="type-label">
+                      {transaction.type === 'income' ? 'Receita' : 'Despesa'}
+                    </span>
+                  </div>
+                  
+                  <div className="transaction-amount-display">
+                    <span className={`amount ${transaction.type}`}>
+                      {transaction.type === 'income' ? '+' : '-'}R$ {transaction.amount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="transaction-body">
+                  <h4 className="transaction-title">{transaction.description}</h4>
+                  
+                  <div className="transaction-details">
+                    <div className="detail-item">
+                      <span className="detail-label">Categoria:</span>
+                      <span className="detail-value">{transaction.category}</span>
+                    </div>
+                    
+                    <div className="detail-item">
+                      <span className="detail-label">Data:</span>
+                      <span className="detail-value">
+                        {new Date(transaction.date).toLocaleDateString('pt-BR')}
+                      </span>
+                    </div>
+                    
+                    <div className="detail-item">
+                      <span className="detail-label">Pagamento:</span>
+                      <span className="detail-value">{transaction.paymentMethod}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="transaction-actions">
+                  <button 
+                    className="btn-edit"
+                    onClick={() => {
+                      setEditingTransaction(transaction);
+                      setShowEditModal(true);
+                    }}
+                    title="Editar"
+                  >
+                    ✏️
+                  </button>
+                  <button 
+                    className="btn-delete"
+                    onClick={() => {
+                      setTransactionToDelete(transaction);
+                      setShowDeleteModal(true);
+                    }}
+                    title="Excluir"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Modais */}
+      {showAddModal && (
+        <AddTransactionModal 
+          onSave={handleAddTransaction}
+          onCancel={() => setShowAddModal(false)}
+        />
+      )}
+
+      {showEditModal && (
+        <EditTransactionModal 
+          transaction={editingTransaction}
+          onSave={handleEditTransaction}
+          onCancel={() => {
+            setShowEditModal(false);
+            setEditingTransaction(null);
+          }}
+        />
+      )}
+
+      {/* Modal de confirmação de exclusão inline */}
+      {showDeleteModal && transactionToDelete && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirmar Exclusão</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Tem certeza que deseja deletar esta transação?</p>
+              <div className="transaction-preview">
+                <strong>{transactionToDelete.description}</strong>
+                <span className={`amount ${transactionToDelete.type}`}>
+                  {transactionToDelete.type === 'income' ? '+' : '-'}R$ {(transactionToDelete.amount || 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-danger"
+                onClick={handleDeleteTransaction}
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 💳 CARTÃO DE CRÉDITO PAGE
+const CreditCardPage = () => {
+  const [transactions, setTransactions] = useState([]);
+  const [creditTransactions, setCreditTransactions] = useState([]);
+  const [totalCreditAmount, setTotalCreditAmount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [transactionToDelete, setTransactionToDelete] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  const loadTransactions = async (month = selectedMonth, year = selectedYear) => {
+    try {
+      const response = await axios.get(`/transactions?month=${month}&year=${year}`);
+      const allTransactions = response.data || [];
+      setTransactions(allTransactions);
+      
+      // Filtrar apenas transações de crédito
+      const creditOnly = allTransactions.filter(t => 
+        t && t.type === 'expense' && t.paymentMethod === 'credito'
+      );
+      setCreditTransactions(creditOnly);
+      
+      // Calcular total do cartão de crédito
+      const total = creditOnly.reduce((sum, t) => sum + (t.amount || 0), 0);
+      setTotalCreditAmount(total);
+      
+    } catch (error) {
+      console.error('Erro ao carregar transações:', error);
+      setTransactions([]);
+      setCreditTransactions([]);
+      setTotalCreditAmount(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditTransaction = async (transactionData) => {
+    try {
+      const response = await axios.put(`/transactions/${editingTransaction._id}`, transactionData);
+      
+      // Atualizar lista local
+      const updatedTransactions = transactions.map(t => 
+        t._id === editingTransaction._id ? response.data : t
+      );
+      setTransactions(updatedTransactions);
+      
+      setShowEditModal(false);
+      setEditingTransaction(null);
+      alert('Transação editada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao editar transação:', error);
+      alert('Erro ao editar transação');
+    }
+  };
+
+  const handleDeleteTransaction = async (deleteAll = false) => {
+    try {
+      if (deleteAll && (transactionToDelete.recurringParentId || transactionToDelete.isRecurring)) {
+        // Deletar todas as transações da série recorrente
+        await axios.delete(`/transactions/${transactionToDelete._id}/recurring`);
+        alert('Todas as transações da série foram deletadas!');
+      } else if (deleteAll && (transactionToDelete.installmentParentId || transactionToDelete.isInstallment)) {
+        // Deletar todas as parcelas da série parcelada
+        await axios.delete(`/transactions/${transactionToDelete._id}/installments`);
+        alert('Todas as parcelas foram deletadas!');
+      } else {
+        // Deletar apenas esta transação
+        await axios.delete(`/transactions/${transactionToDelete._id}`);
+        alert('Transação deletada com sucesso!');
+      }
+      
+      setShowDeleteModal(false);
+      setTransactionToDelete(null);
+      
+      // Recarregar transações para garantir sincronização
+      loadTransactions();
+    } catch (error) {
+      console.error('Erro ao deletar transação:', error);
+      alert('Erro ao deletar transação');
+    }
+  };
+
+  const handleAddTransaction = async (transactionData) => {
+    try {
+      const response = await axios.post('/transactions', transactionData);
+      
+      // Adicionar à lista local
+      setTransactions([response.data, ...transactions]);
+      
+      setShowAddModal(false);
+      alert('Transação adicionada com sucesso!');
+      
+      // Recarregar transações para garantir sincronização
+      loadTransactions();
+    } catch (error) {
+      console.error('Erro ao adicionar transação:', error);
+      alert('Erro ao adicionar transação');
+    }
+  };
+
+  const changeMonth = (direction) => {
+    let newMonth = selectedMonth + direction;
+    let newYear = selectedYear;
+    
+    if (newMonth > 12) {
+      newMonth = 1;
+      newYear++;
+    } else if (newMonth < 1) {
+      newMonth = 12;
+      newYear--;
+    }
+    
+    setSelectedMonth(newMonth);
+    setSelectedYear(newYear);
+    loadTransactions(newMonth, newYear);
+  };
+
+  const getMonthName = (month) => {
+    const months = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return months[month - 1];
+  };
+
+  const openEditModal = (transaction) => {
+    setEditingTransaction(transaction);
+    setShowEditModal(true);
+  };
+
+  const openDeleteModal = (transaction) => {
+    setTransactionToDelete(transaction);
+    setShowDeleteModal(true);
+  };
+
+  useEffect(() => {
+    loadTransactions();
+  }, []);
+
+  if (loading) {
+    return <div className="page loading">Carregando gastos do cartão...</div>;
+  }
+
+  return (
+    <div className="page">
+      <div className="month-selector">
+        <button 
+          className="month-nav-btn"
+          onClick={() => changeMonth(-1)}
+        >
+          ←
+        </button>
+        <div className="month-display">
+          <h2>💳 Cartão - {getMonthName(selectedMonth)} {selectedYear}</h2>
+          <div className="credit-total">
+            Total: R$ {totalCreditAmount.toFixed(2)}
+          </div>
+        </div>
+        <button 
+          className="month-nav-btn"
+          onClick={() => changeMonth(1)}
+        >
+          →
+        </button>
+      </div>
+
+      <div className="transactions-container">
+        <div className="transactions-list">
+          {creditTransactions && creditTransactions.length > 0 ? (
+            creditTransactions.map((transaction) => (
+              <div key={transaction._id} className="transaction-item">
+                <div className="transaction-info">
+                  <div className={`transaction-icon ${transaction.type}`}>
+                    {transaction.type === 'income' ? '+' : '-'}
+                  </div>
+                  <div className="transaction-details">
+                    <h4>{transaction.description}</h4>
+                    <small>{transaction.category} • {new Date(transaction.date).toLocaleDateString('pt-BR')}</small>
+                  </div>
+                </div>
+                <div className="transaction-right">
+                  <div className={`transaction-amount ${transaction.type}`}>
+                    {transaction.type === 'income' ? '+' : '-'}R$ {(transaction.amount || 0).toFixed(2)}
+                  </div>
+                  <div className="transaction-actions">
+                    <button 
+                      className="action-btn edit-btn"
+                      onClick={() => openEditModal(transaction)}
+                      title="Editar"
+                    >
+                      ✏️
+                    </button>
+                    <button 
+                      className="action-btn delete-btn"
+                      onClick={() => openDeleteModal(transaction)}
+                      title="Deletar"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="no-transactions">
+              <p>💳 Nenhum gasto no cartão este mês</p>
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowAddModal(true)}
+              >
+                Adicionar gasto no cartão
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal de Nova Transação */}
+      {showAddModal && (
+        <AddTransactionModal
+          onSave={handleAddTransaction}
+          onCancel={() => setShowAddModal(false)}
+        />
+      )}
+
+      {/* Modal de Edição */}
+      {showEditModal && editingTransaction && (
+        <EditTransactionModal
+          transaction={editingTransaction}
+          onSave={handleEditTransaction}
+          onCancel={() => {
+            setShowEditModal(false);
+            setEditingTransaction(null);
+          }}
+        />
+      )}
+
+      {/* Modal de Confirmação de Exclusão */}
+      {showDeleteModal && transactionToDelete && (
+        <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Confirmar Exclusão</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Tem certeza que deseja deletar esta transação?</p>
+              <div className="transaction-preview">
+                <strong>{transactionToDelete.description}</strong>
+                <span className={`amount ${transactionToDelete.type}`}>
+                  {transactionToDelete.type === 'income' ? '+' : '-'}R$ {(transactionToDelete.amount || 0).toFixed(2)}
+                </span>
+              </div>
+              {(transactionToDelete.recurringParentId || transactionToDelete.isRecurring) && (
+                <div className="recurring-info">
+                  <p><strong>Esta é uma transação fixa.</strong></p>
+                  <p>Escolha uma das opções:</p>
+                </div>
+              )}
+              {(transactionToDelete.installmentParentId || transactionToDelete.isInstallment) && (
+                <div className="recurring-info">
+                  <p><strong>Esta é uma transação parcelada ({transactionToDelete.installmentNumber}/{transactionToDelete.totalInstallments}).</strong></p>
+                  <p>Escolha uma das opções:</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowDeleteModal(false)}
+              >
+                Cancelar
+              </button>
+              {(transactionToDelete.recurringParentId || transactionToDelete.isRecurring) ? (
+                <>
+                  <button 
+                    className="btn-danger"
+                    onClick={() => handleDeleteTransaction(false)}
+                  >
+                    Deletar Apenas Este Mês
+                  </button>
+                  <button 
+                    className="btn-danger"
+                    onClick={() => handleDeleteTransaction(true)}
+                  >
+                    Deletar Todos os Meses
+                  </button>
+                </>
+              ) : (transactionToDelete.installmentParentId || transactionToDelete.isInstallment) ? (
+                <>
+                  <button 
+                    className="btn-danger"
+                    onClick={() => handleDeleteTransaction(false)}
+                  >
+                    Deletar Apenas Esta Parcela
+                  </button>
+                  <button 
+                    className="btn-danger"
+                    onClick={() => handleDeleteTransaction(true)}
+                  >
+                    Deletar Todas as Parcelas
+                  </button>
+                </>
+              ) : (
+                <button 
+                  className="btn-danger"
+                  onClick={() => handleDeleteTransaction(false)}
+                >
+                  Deletar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FAB - Floating Action Button */}
+      <button 
+        className="fab"
+        onClick={() => setShowAddModal(true)}
+        title="Adicionar Nova Transação"
+      >
+        +
+      </button>
+    </div>
+  );
+};
+
+// Modal de Edição de Transação
+const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
+  // Função para formatar valor inicial
+  const formatInitialAmount = (amount) => {
+    if (!amount) return '';
+    
+    // Multiplica por 100 para trabalhar com centavos
+    const valueInCents = Math.round(amount * 100);
+    
+    // Se é zero, retorna 0,00
+    if (valueInCents === 0) return '0,00';
+    
+    // Converte para string
+    const valueStr = valueInCents.toString();
+    
+    // Se tem apenas 1 dígito: 5 -> 0,05
+    if (valueStr.length === 1) {
+      return `0,0${valueStr}`;
+    }
+    
+    // Se tem apenas 2 dígitos: 56 -> 0,56
+    if (valueStr.length === 2) {
+      return `0,${valueStr}`;
+    }
+    
+    // Se tem 3 ou mais dígitos: 123 -> 1,23
+    const reais = valueStr.slice(0, -2);
+    const centavos = valueStr.slice(-2);
+    
+    // Remove zeros à esquerda dos reais
+    const reaisNum = parseInt(reais, 10);
+    const reaisFormatted = reaisNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${reaisFormatted},${centavos}`;
+  };
+
+  const [formData, setFormData] = useState({
+    description: transaction.description || '',
+    amount: formatInitialAmount(transaction.amount),
+    type: transaction.type || 'expense',
+    category: transaction.category || '',
+    date: transaction.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    isRecurring: transaction.isRecurring || !!transaction.recurringParentId,
+    paymentMethod: transaction.paymentMethod || 'pix',
+    isInstallment: transaction.isInstallment || !!transaction.installmentParentId,
+    installmentNumber: transaction.installmentNumber || 1,
+    totalInstallments: transaction.totalInstallments || 2
+  });
+  
+  const [showUpdateAllModal, setShowUpdateAllModal] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState(null);
+
+  const formatCurrency = (value) => {
+    // Remove tudo que não é número
+    let numbers = value.replace(/\D/g, '');
+    
+    // Se não tem números, retorna vazio
+    if (!numbers) return '';
+    
+    // Converte para número para remover zeros à esquerda
+    const numericValue = parseInt(numbers, 10);
+    
+    // Se é zero, retorna 0,00
+    if (numericValue === 0) return '0,00';
+    
+    // Converte de volta para string para processar
+    numbers = numericValue.toString();
+    
+    // Se tem apenas 1 dígito: 5 -> 0,05
+    if (numbers.length === 1) {
+      return `0,0${numbers}`;
+    }
+    
+    // Se tem apenas 2 dígitos: 56 -> 0,56
+    if (numbers.length === 2) {
+      return `0,${numbers}`;
+    }
+    
+    // Se tem 3 ou mais dígitos: 123 -> 1,23 | 1234 -> 12,34 | 12345 -> 123,45
+    const reais = numbers.slice(0, -2);
+    const centavos = numbers.slice(-2);
+    
+    // Adiciona separador de milhares nos reais se necessário
+    const reaisFormatted = reais.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${reaisFormatted},${centavos}`;
+  };
+
+  const handleAmountChange = (e) => {
+    const value = e.target.value;
+    const formatted = formatCurrency(value);
+    
+    setFormData(prev => ({
+      ...prev,
+      amount: formatted
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.description || !formData.amount) {
+      alert('Por favor, preencha todos os campos obrigatórios');
+      return;
+    }
+
+    // Converte o valor formatado de volta para número
+    const numericAmount = parseFloat(formData.amount.replace(/\./g, '').replace(',', '.'));
+
+    const transactionData = {
+      ...formData,
+      amount: numericAmount
+    };
+
+    // Se for transação recorrente e algo mudou, perguntar se é para todos os meses
+    if ((transaction.recurringParentId || transaction.isRecurring) && 
+        (formData.amount !== transaction.amount.toFixed(2) || 
+         formData.description !== transaction.description ||
+         formData.category !== transaction.category)) {
+      setPendingFormData(transactionData);
+      setShowUpdateAllModal(true);
+    } else {
+      onSave(transactionData);
+    }
+  };
+
+  const handleUpdateChoice = (updateAll) => {
+    onSave({
+      ...pendingFormData,
+      updateAll
+    });
+    setShowUpdateAllModal(false);
+    setPendingFormData(null);
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  return (
+    <>
+      <div className="modal-overlay" onClick={onCancel}>
+        <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Editar Transação</h3>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            {/* 1. TIPO - Botões Receita/Despesa */}
+            <div className="form-group">
+              <label>Tipo *</label>
+              <div className="type-buttons">
+                <button
+                  type="button"
+                  className={`type-button income ${formData.type === 'income' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, type: 'income' }))}
+                >
+                  💰 Receita
+                </button>
+                <button
+                  type="button"
+                  className={`type-button expense ${formData.type === 'expense' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, type: 'expense' }))}
+                >
+                  💸 Despesa
+                </button>
+              </div>
+            </div>
+
+            {/* 2. DATA */}
+            <div className="form-group">
+              <label>Data *</label>
+              <input
+                type="date"
+                name="date"
+                value={formData.date}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            {/* 3. TIPO DE PAGAMENTO */}
+            <div className="form-group">
+              <label>Tipo de Pagamento *</label>
+              <div className="payment-buttons">
+                <button
+                  type="button"
+                  className={`payment-button debito ${formData.paymentMethod === 'debito' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'debito' }))}
+                >
+                  💳 Débito
+                </button>
+                <button
+                  type="button"
+                  className={`payment-button credito ${formData.paymentMethod === 'credito' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'credito' }))}
+                >
+                  🏦 Crédito
+                </button>
+                <button
+                  type="button"
+                  className={`payment-button pix ${formData.paymentMethod === 'pix' ? 'active' : ''} ${formData.isInstallment ? 'disabled' : ''}`}
+                  disabled={formData.isInstallment}
+                  onClick={() => {
+                    if (!formData.isInstallment) {
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        paymentMethod: 'pix',
+                        // Se selecionar PIX, desativar parcelamento
+                        isInstallment: false
+                      }));
+                    }
+                  }}
+                >
+                  📱 PIX
+                </button>
+              </div>
+            </div>
+
+            <div className="form-row">
+              {/* 4. DESCRIÇÃO */}
+              <div className="form-group">
+                <label>Descrição *</label>
+                <input
+                  type="text"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  placeholder="Ex: Almoço, Salário, etc."
+                  required
+                />
+              </div>
+
+              {/* 5. VALOR */}
+              <div className="form-group">
+                <label>Valor *</label>
+                <div className="currency-input">
+                  <span className="currency-symbol">R$</span>
+                  <input
+                    type="text"
+                    name="amount"
+                    value={formData.amount}
+                    onChange={handleAmountChange}
+                    placeholder="0,00"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* 6. CATEGORIA */}
+            <div className="form-group">
+              <label>Categoria</label>
+              <select
+                name="category"
+                value={formData.category}
+                onChange={handleChange}
+              >
+                <option value="">Selecione uma categoria</option>
+                {formData.type === 'income' ? (
+                  <>
+                    <option value="Salário">Salário</option>
+                    <option value="Freelance">Freelance</option>
+                    <option value="Investimentos">Investimentos</option>
+                    <option value="Outros">Outros</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="Alimentação">Alimentação</option>
+                    <option value="Transporte">Transporte</option>
+                    <option value="Moradia">Moradia</option>
+                    <option value="Saúde">Saúde</option>
+                    <option value="Educação">Educação</option>
+                    <option value="Lazer">Lazer</option>
+                    <option value="Outros">Outros</option>
+                  </>
+                )}
+              </select>
+            </div>
+            
+            {/* 7. RECORRENTE */}
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="isRecurring"
+                  checked={formData.isRecurring}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    isRecurring: e.target.checked,
+                    // Se ativar recorrente, desativar parcelamento
+                    isInstallment: e.target.checked ? false : prev.isInstallment
+                  }))}
+                  disabled={transaction.recurringParentId || transaction.isRecurring}
+                  style={{ opacity: (transaction.recurringParentId || transaction.isRecurring) ? 0.5 : 1 }}
+                />
+                <span className="checkbox-text">Transação Fixa (repete todos os meses)</span>
+              </label>
+            </div>
+
+            {/* 7. PARCELAMENTO */}
+            <div className="form-group">
+              <label className={`checkbox-label ${formData.isRecurring ? 'disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  name="isInstallment"
+                  checked={formData.isInstallment}
+                  disabled={formData.isRecurring}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    isInstallment: e.target.checked,
+                    // Se ativar parcelamento e estiver no PIX, mudar para débito
+                    paymentMethod: (e.target.checked && prev.paymentMethod === 'pix') ? 'debito' : prev.paymentMethod
+                  }))}
+                  style={{ opacity: formData.isRecurring ? 0.5 : 1 }}
+                />
+                <span className="checkbox-text">Parcelado (crédito/débito apenas)</span>
+              </label>
+            </div>
+
+            {/* Campo de número de parcelas */}
+            {formData.isInstallment && (
+              <div className="form-group">
+                <label htmlFor="totalInstallments">Número de Parcelas:</label>
+                <input
+                  type="number"
+                  id="totalInstallments"
+                  name="totalInstallments"
+                  min="2"
+                  max="60"
+                  value={formData.totalInstallments}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    totalInstallments: parseInt(e.target.value) || 2
+                  }))}
+                  required
+                />
+                <small className="helper-text">De 2 a 60 parcelas</small>
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-cancel" onClick={onCancel}>
+              <span>❌</span>
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn-success">
+              <span>💾</span>
+              Salvar Alterações
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {/* Modal de Confirmação para Edição de Transação Recorrente */}
+    {showUpdateAllModal && (
+      <div className="modal-overlay" onClick={() => setShowUpdateAllModal(false)}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Atualizar Transação Fixa</h3>
+            <button className="modal-close" onClick={() => setShowUpdateAllModal(false)}>×</button>
+          </div>
+          <div className="modal-body">
+            <div className="recurring-info">
+              <p><strong>Esta é uma transação fixa.</strong></p>
+              <p>Deseja aplicar as alterações:</p>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button 
+              className="btn-secondary"
+              onClick={() => setShowUpdateAllModal(false)}
+            >
+              Cancelar
+            </button>
+            <button 
+              className="btn-primary"
+              onClick={() => handleUpdateChoice(false)}
+            >
+              Apenas Este Mês
+            </button>
+            <button 
+              className="btn-primary"
+              onClick={() => handleUpdateChoice(true)}
+            >
+              Todos os Meses
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
+  );
+};
+
+// Modal de Nova Transação
+const AddTransactionModal = ({ onSave, onCancel }) => {
+  const today = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+  const [formData, setFormData] = useState({
+    description: '',
+    amount: '',
+    type: 'expense',
+    category: '',
+    date: today,
+    paymentMethod: 'pix',
+    isRecurring: false,
+    isInstallment: false,
+    installmentNumber: 1,
+    totalInstallments: 2
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.description || !formData.amount) {
+      alert('Por favor, preencha todos os campos obrigatórios');
+      return;
+    }
+
+    // Converte o valor formatado de volta para número
+    const numericAmount = parseFloat(formData.amount.replace(/\./g, '').replace(',', '.'));
+
+    onSave({
+      ...formData,
+      amount: numericAmount
+    });
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const formatCurrency = (value) => {
+    // Remove tudo que não é número
+    let numbers = value.replace(/\D/g, '');
+    
+    // Se não tem números, retorna vazio
+    if (!numbers) return '';
+    
+    // Converte para número para remover zeros à esquerda
+    const numericValue = parseInt(numbers, 10);
+    
+    // Se é zero, retorna 0,00
+    if (numericValue === 0) return '0,00';
+    
+    // Converte de volta para string para processar
+    numbers = numericValue.toString();
+    
+    // Se tem apenas 1 dígito: 5 -> 0,05
+    if (numbers.length === 1) {
+      return `0,0${numbers}`;
+    }
+    
+    // Se tem apenas 2 dígitos: 56 -> 0,56
+    if (numbers.length === 2) {
+      return `0,${numbers}`;
+    }
+    
+    // Se tem 3 ou mais dígitos: 123 -> 1,23 | 1234 -> 12,34 | 12345 -> 123,45
+    const reais = numbers.slice(0, -2);
+    const centavos = numbers.slice(-2);
+    
+    // Adiciona separador de milhares nos reais se necessário
+    const reaisFormatted = reais.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${reaisFormatted},${centavos}`;
+  };
+
+  const handleAmountChange = (e) => {
+    const value = e.target.value;
+    const formatted = formatCurrency(value);
+    
+    setFormData(prev => ({
+      ...prev,
+      amount: formatted
+    }));
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Nova Transação</h3>
+          <button className="modal-close" onClick={onCancel}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            {/* 1. TIPO - Botões Receita/Despesa */}
+            <div className="form-group">
+              <label>Tipo *</label>
+              <div className="type-buttons">
+                <button
+                  type="button"
+                  className={`type-button income ${formData.type === 'income' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, type: 'income' }))}
+                >
+                  💰 Receita
+                </button>
+                <button
+                  type="button"
+                  className={`type-button expense ${formData.type === 'expense' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, type: 'expense' }))}
+                >
+                  💸 Despesa
+                </button>
+              </div>
+            </div>
+
+            {/* 2. DATA */}
+            <div className="form-group">
+              <label>Data *</label>
+              <input
+                type="date"
+                name="date"
+                value={formData.date}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            {/* 3. TIPO DE PAGAMENTO */}
+            <div className="form-group">
+              <label>Tipo de Pagamento *</label>
+              <div className="payment-buttons">
+                <button
+                  type="button"
+                  className={`payment-button debito ${formData.paymentMethod === 'debito' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'debito' }))}
+                >
+                  💳 Débito
+                </button>
+                <button
+                  type="button"
+                  className={`payment-button credito ${formData.paymentMethod === 'credito' ? 'active' : ''}`}
+                  onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'credito' }))}
+                >
+                  🏦 Crédito
+                </button>
+                <button
+                  type="button"
+                  className={`payment-button pix ${formData.paymentMethod === 'pix' ? 'active' : ''} ${formData.isInstallment ? 'disabled' : ''}`}
+                  disabled={formData.isInstallment}
+                  onClick={() => {
+                    if (!formData.isInstallment) {
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        paymentMethod: 'pix',
+                        // Se selecionar PIX, desativar parcelamento
+                        isInstallment: false
+                      }));
+                    }
+                  }}
+                >
+                  📱 PIX
+                </button>
+              </div>
+            </div>
+
+            <div className="form-row">
+              {/* 4. DESCRIÇÃO */}
+              <div className="form-group">
+                <label>Descrição *</label>
+                <input
+                  type="text"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  placeholder="Ex: Almoço, Salário, etc."
+                  required
+                />
+              </div>
+              
+              {/* 4.5. VALOR */}
+              <div className="form-group">
+                <label>Valor *</label>
+                <div className="currency-input">
+                  <span className="currency-symbol">R$</span>
+                  <input
+                    type="text"
+                    name="amount"
+                    value={formData.amount}
+                    onChange={handleAmountChange}
+                    placeholder="0,00"
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* 5. CATEGORIA */}
+            <div className="form-group">
+              <label>Categoria</label>
+              <select
+                name="category"
+                value={formData.category}
+                onChange={handleChange}
+              >
+                <option value="">Selecione uma categoria</option>
+                {formData.type === 'income' ? (
+                  <>
+                    <option value="Salário">Salário</option>
+                    <option value="Freelance">Freelance</option>
+                    <option value="Investimentos">Investimentos</option>
+                    <option value="Outros">Outros</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="Alimentação">Alimentação</option>
+                    <option value="Transporte">Transporte</option>
+                    <option value="Moradia">Moradia</option>
+                    <option value="Saúde">Saúde</option>
+                    <option value="Educação">Educação</option>
+                    <option value="Lazer">Lazer</option>
+                    <option value="Outros">Outros</option>
+                  </>
+                )}
+              </select>
+            </div>
+            
+            {/* 6. TRANSAÇÃO FIXA */}
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  name="isRecurring"
+                  checked={formData.isRecurring}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    isRecurring: e.target.checked,
+                    // Se ativar recorrente, desativar parcelamento
+                    isInstallment: e.target.checked ? false : prev.isInstallment
+                  }))}
+                />
+                <span className="checkbox-text">Transação Fixa (repete todos os meses)</span>
+              </label>
+            </div>
+
+            {/* 7. PARCELAMENTO */}
+            <div className="form-group">
+              <label className={`checkbox-label ${formData.isRecurring || formData.paymentMethod === 'pix' ? 'disabled' : ''}`}>
+                <input
+                  type="checkbox"
+                  name="isInstallment"
+                  checked={formData.isInstallment}
+                  disabled={formData.isRecurring || formData.paymentMethod === 'pix'}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    isInstallment: e.target.checked,
+                    // Se ativar parcelamento e estiver no PIX, mudar para débito
+                    paymentMethod: (e.target.checked && prev.paymentMethod === 'pix') ? 'debito' : prev.paymentMethod
+                  }))}
+                />
+                <span className="checkbox-text">Parcelado (crédito/débito apenas)</span>
+              </label>
+            </div>
+
+            {/* Campo de número de parcelas */}
+            {formData.isInstallment && (
+              <div className="form-group">
+                <label htmlFor="totalInstallments">Número de Parcelas:</label>
+                <input
+                  type="number"
+                  id="totalInstallments"
+                  name="totalInstallments"
+                  min="2"
+                  max="60"
+                  value={formData.totalInstallments}
+                  onChange={(e) => setFormData(prev => ({
+                    ...prev,
+                    totalInstallments: parseInt(e.target.value) || 2
+                  }))}
+                  required
+                />
+                <small className="helper-text">De 2 a 60 parcelas</small>
+              </div>
+            )}
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-cancel" onClick={onCancel}>
+              <span>❌</span>
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn-success">
+              <span>💾</span>
+              Adicionar Transação
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Página Cartões
+const CardsPage = () => {
+  return (
+    <div className="page">
+      <div className="coming-soon">
+        <h2>🚧 Em desenvolvimento</h2>
+        <p>Esta funcionalidade será implementada em breve!</p>
+      </div>
+    </div>
+  );
+};
+
+// Página Bancos
+const BanksPage = () => {
+  return (
+    <div className="page">
+      <div className="coming-soon">
+        <h2>🚧 Em desenvolvimento</h2>
+        <p>Esta funcionalidade será implementada em breve!</p>
+      </div>
+    </div>
+  );
+};
+
+// Página Configurações
+const SettingsPage = () => {
+  const { user, logout } = useAuth();
+
+  return (
+    <div className="page">
+      <div className="settings-container">
+        <div className="settings-section">
+          <h2>👤 Perfil do Usuário</h2>
+          <div className="user-info">
+            <p><strong>Email:</strong> {user?.email || 'Não informado'}</p>
+            <p><strong>Nome:</strong> {user?.name || 'Não informado'}</p>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h2>🎨 Preferências</h2>
+          <div className="coming-soon">
+            <p>Configurações de tema e personalização em breve!</p>
+          </div>
+        </div>
+
+        <div className="settings-section">
+          <h2>🚪 Sessão</h2>
+          <button className="btn-danger" onClick={logout}>
+            Fazer Logout
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Layout principal com sidebar
+const MainLayout = ({ children }) => {
+  return (
+    <div className="app-layout">
+      <Sidebar />
+      <div className="main-content">
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// Componente principal do App
+const App = () => {
+  return (
+    <AuthProvider>
+      <Router>
+        <div className="app">
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <DashboardPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/all-transactions"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <AllTransactionsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/transactions"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <CreditCardPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cards"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <CardsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/banks"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <BanksPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <SettingsPage />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </div>
+      </Router>
+    </AuthProvider>
+  );
+};
+
+export default App;
