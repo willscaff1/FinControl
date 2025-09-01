@@ -314,6 +314,407 @@ const LoginPage = () => {
   );
 };
 
+// Modal de Edição de Transação
+const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
+  // Função para formatar valor inicial
+  const formatInitialAmount = (amount) => {
+    if (!amount) return '';
+    
+    // Multiplica por 100 para trabalhar com centavos
+    const valueInCents = Math.round(amount * 100);
+    
+    // Se é zero, retorna 0,00
+    if (valueInCents === 0) return '0,00';
+    
+    // Converte para string
+    const valueStr = valueInCents.toString();
+    
+    // Se tem apenas 1 dígito: 5 -> 0,05
+    if (valueStr.length === 1) {
+      return `0,0${valueStr}`;
+    }
+    
+    // Se tem apenas 2 dígitos: 56 -> 0,56
+    if (valueStr.length === 2) {
+      return `0,${valueStr}`;
+    }
+    
+    // Se tem 3 ou mais dígitos: 123 -> 1,23
+    const reais = valueStr.slice(0, -2);
+    const centavos = valueStr.slice(-2);
+    
+    // Remove zeros à esquerda dos reais
+    const reaisNum = parseInt(reais, 10);
+    const reaisFormatted = reaisNum.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${reaisFormatted},${centavos}`;
+  };
+
+  const [formData, setFormData] = useState({
+    description: transaction.description || '',
+    amount: formatInitialAmount(transaction.amount),
+    type: transaction.type || 'expense',
+    category: transaction.category || '',
+    date: transaction.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+    isRecurring: transaction.isRecurring || !!transaction.recurringParentId,
+    paymentMethod: transaction.paymentMethod || 'pix',
+    isInstallment: transaction.isInstallment || !!transaction.installmentParentId,
+    installmentNumber: transaction.installmentNumber || 1,
+    totalInstallments: transaction.totalInstallments || 2
+  });
+  
+  const [showUpdateAllModal, setShowUpdateAllModal] = useState(false);
+  const [pendingFormData, setPendingFormData] = useState(null);
+
+  const formatCurrency = (value) => {
+    // Remove tudo que não é número
+    let numbers = value.replace(/\D/g, '');
+    
+    // Se não tem números, retorna vazio
+    if (!numbers) return '';
+    
+    // Converte para número para remover zeros à esquerda
+    const numericValue = parseInt(numbers, 10);
+    
+    // Se é zero, retorna 0,00
+    if (numericValue === 0) return '0,00';
+    
+    // Converte de volta para string para processar
+    numbers = numericValue.toString();
+    
+    // Se tem apenas 1 dígito: 5 -> 0,05
+    if (numbers.length === 1) {
+      return `0,0${numbers}`;
+    }
+    
+    // Se tem apenas 2 dígitos: 56 -> 0,56
+    if (numbers.length === 2) {
+      return `0,${numbers}`;
+    }
+    
+    // Se tem 3 ou mais dígitos: 123 -> 1,23 | 1234 -> 12,34 | 12345 -> 123,45
+    const reais = numbers.slice(0, -2);
+    const centavos = numbers.slice(-2);
+    
+    // Adiciona separador de milhares nos reais se necessário
+    const reaisFormatted = reais.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    
+    return `${reaisFormatted},${centavos}`;
+  };
+
+  const handleAmountChange = (e) => {
+    const value = e.target.value;
+    const formatted = formatCurrency(value);
+    
+    setFormData(prev => ({
+      ...prev,
+      amount: formatted
+    }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!formData.description || !formData.amount) {
+      alert('Por favor, preencha todos os campos obrigatórios');
+      return;
+    }
+
+    // Converte o valor formatado de volta para número
+    const numericAmount = parseFloat(formData.amount.replace(/\./g, '').replace(',', '.'));
+
+    const transactionData = {
+      ...formData,
+      amount: numericAmount
+    };
+
+    // Se for transação recorrente e algo mudou, perguntar se é para todos os meses
+    if ((transaction.recurringParentId || transaction.isRecurring) && 
+        (formData.amount !== formatInitialAmount(transaction.amount) || 
+         formData.description !== transaction.description ||
+         formData.category !== transaction.category)) {
+      setPendingFormData(transactionData);
+      setShowUpdateAllModal(true);
+    } else {
+      onSave(transactionData);
+    }
+  };
+
+  const handleUpdateChoice = (updateAll) => {
+    onSave({
+      ...pendingFormData,
+      updateAll
+    });
+    setShowUpdateAllModal(false);
+    setPendingFormData(null);
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  return (
+    <>
+      <div className="modal-overlay" onClick={onCancel}>
+        <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Editar Transação</h3>
+            <button className="modal-close" onClick={onCancel}>×</button>
+          </div>
+          <form onSubmit={handleSubmit}>
+            <div className="modal-body">
+              {/* 1. TIPO - Botões Receita/Despesa */}
+              <div className="form-group">
+                <label>Tipo *</label>
+                <div className="type-buttons">
+                  <button
+                    type="button"
+                    className={`type-button income ${formData.type === 'income' ? 'active' : ''}`}
+                    onClick={() => setFormData(prev => ({ ...prev, type: 'income' }))}
+                  >
+                    💰 Receita
+                  </button>
+                  <button
+                    type="button"
+                    className={`type-button expense ${formData.type === 'expense' ? 'active' : ''}`}
+                    onClick={() => setFormData(prev => ({ ...prev, type: 'expense' }))}
+                  >
+                    💸 Despesa
+                  </button>
+                </div>
+              </div>
+
+              {/* 2. DATA */}
+              <div className="form-group">
+                <label>Data *</label>
+                <input
+                  type="date"
+                  name="date"
+                  value={formData.date}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              {/* 3. TIPO DE PAGAMENTO */}
+              <div className="form-group">
+                <label>Tipo de Pagamento *</label>
+                <div className="payment-buttons">
+                  <button
+                    type="button"
+                    className={`payment-button debito ${formData.paymentMethod === 'debito' ? 'active' : ''}`}
+                    onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'debito' }))}
+                  >
+                    💳 Débito
+                  </button>
+                  <button
+                    type="button"
+                    className={`payment-button credito ${formData.paymentMethod === 'credito' ? 'active' : ''}`}
+                    onClick={() => setFormData(prev => ({ ...prev, paymentMethod: 'credito' }))}
+                  >
+                    🏦 Crédito
+                  </button>
+                  <button
+                    type="button"
+                    className={`payment-button pix ${formData.paymentMethod === 'pix' ? 'active' : ''} ${formData.isInstallment ? 'disabled' : ''}`}
+                    disabled={formData.isInstallment}
+                    onClick={() => {
+                      if (!formData.isInstallment) {
+                        setFormData(prev => ({ 
+                          ...prev, 
+                          paymentMethod: 'pix',
+                          // Se selecionar PIX, desativar parcelamento
+                          isInstallment: false
+                        }));
+                      }
+                    }}
+                  >
+                    📱 PIX
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-row">
+                {/* 4. DESCRIÇÃO */}
+                <div className="form-group">
+                  <label>Descrição *</label>
+                  <input
+                    type="text"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleChange}
+                    placeholder="Ex: Almoço, Salário, etc."
+                    required
+                  />
+                </div>
+
+                {/* 5. VALOR */}
+                <div className="form-group">
+                  <label>Valor *</label>
+                  <div className="currency-input">
+                    <span className="currency-symbol">R$</span>
+                    <input
+                      type="text"
+                      name="amount"
+                      value={formData.amount}
+                      onChange={handleAmountChange}
+                      placeholder="0,00"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              {/* 6. CATEGORIA */}
+              <div className="form-group">
+                <label>Categoria</label>
+                <select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleChange}
+                >
+                  <option value="">Selecione uma categoria</option>
+                  {formData.type === 'income' ? (
+                    <>
+                      <option value="Salário">Salário</option>
+                      <option value="Freelance">Freelance</option>
+                      <option value="Investimentos">Investimentos</option>
+                      <option value="Outros">Outros</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value="Alimentação">Alimentação</option>
+                      <option value="Transporte">Transporte</option>
+                      <option value="Moradia">Moradia</option>
+                      <option value="Saúde">Saúde</option>
+                      <option value="Educação">Educação</option>
+                      <option value="Lazer">Lazer</option>
+                      <option value="Outros">Outros</option>
+                    </>
+                  )}
+                </select>
+              </div>
+              
+              {/* 7. RECORRENTE */}
+              <div className="form-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    name="isRecurring"
+                    checked={formData.isRecurring}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      isRecurring: e.target.checked,
+                      // Se ativar recorrente, desativar parcelamento
+                      isInstallment: e.target.checked ? false : prev.isInstallment
+                    }))}
+                    disabled={transaction.recurringParentId || transaction.isRecurring}
+                    style={{ opacity: (transaction.recurringParentId || transaction.isRecurring) ? 0.5 : 1 }}
+                  />
+                  <span className="checkbox-text">Transação Fixa (repete todos os meses)</span>
+                </label>
+              </div>
+
+              {/* 7. PARCELAMENTO */}
+              <div className="form-group">
+                <label className={`checkbox-label ${formData.isRecurring ? 'disabled' : ''}`}>
+                  <input
+                    type="checkbox"
+                    name="isInstallment"
+                    checked={formData.isInstallment}
+                    disabled={formData.isRecurring}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      isInstallment: e.target.checked,
+                      // Se ativar parcelamento e estiver no PIX, mudar para débito
+                      paymentMethod: (e.target.checked && prev.paymentMethod === 'pix') ? 'debito' : prev.paymentMethod
+                    }))}
+                    style={{ opacity: formData.isRecurring ? 0.5 : 1 }}
+                  />
+                  <span className="checkbox-text">Parcelado (crédito/débito apenas)</span>
+                </label>
+              </div>
+
+              {/* Campo de número de parcelas */}
+              {formData.isInstallment && (
+                <div className="form-group">
+                  <label htmlFor="totalInstallments">Número de Parcelas:</label>
+                  <input
+                    type="number"
+                    id="totalInstallments"
+                    name="totalInstallments"
+                    min="2"
+                    max="60"
+                    value={formData.totalInstallments}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      totalInstallments: parseInt(e.target.value) || 2
+                    }))}
+                    required
+                  />
+                  <small className="helper-text">De 2 a 60 parcelas</small>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-cancel" onClick={onCancel}>
+                <span>❌</span>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-success">
+                <span>💾</span>
+                Salvar Alterações
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {/* Modal de Confirmação para Edição de Transação Recorrente */}
+      {showUpdateAllModal && (
+        <div className="modal-overlay" onClick={() => setShowUpdateAllModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Atualizar Transação Fixa</h3>
+              <button className="modal-close" onClick={() => setShowUpdateAllModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="recurring-info">
+                <p><strong>Esta é uma transação fixa.</strong></p>
+                <p>Deseja aplicar as alterações:</p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary"
+                onClick={() => setShowUpdateAllModal(false)}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={() => handleUpdateChoice(false)}
+              >
+                Apenas Este Mês
+              </button>
+              <button 
+                className="btn-primary"
+                onClick={() => handleUpdateChoice(true)}
+              >
+                Todos os Meses
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 // Modal de Nova Transação
 const AddTransactionModal = ({ onSave, onCancel }) => {
   const today = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
@@ -850,6 +1251,22 @@ const AllTransactionsPage = () => {
     }
   };
 
+  const handleEditTransaction = async (transactionData) => {
+    try {
+      const response = await axios.put(`/transactions/${editingTransaction._id}`, transactionData);
+      
+      setShowEditModal(false);
+      setEditingTransaction(null);
+      alert('Transação editada com sucesso!');
+      
+      // Recarregar transações para garantir sincronização
+      loadTransactions();
+    } catch (error) {
+      console.error('Erro ao editar transação:', error);
+      alert('Erro ao editar transação');
+    }
+  };
+
   const handleDeleteTransaction = async (deleteAll = false) => {
     try {
       if (deleteAll && (transactionToDelete.recurringParentId || transactionToDelete.isRecurring)) {
@@ -1009,6 +1426,18 @@ const AllTransactionsPage = () => {
         <AddTransactionModal 
           onSave={handleAddTransaction}
           onCancel={() => setShowAddModal(false)}
+        />
+      )}
+
+      {/* Modal de Edição */}
+      {showEditModal && editingTransaction && (
+        <EditTransactionModal
+          transaction={editingTransaction}
+          onSave={handleEditTransaction}
+          onCancel={() => {
+            setShowEditModal(false);
+            setEditingTransaction(null);
+          }}
         />
       )}
 
