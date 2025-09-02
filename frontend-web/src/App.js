@@ -861,6 +861,64 @@ const EditTransactionModal = ({ transaction, onSave, onCancel }) => {
   );
 };
 
+// Componente Header Padrão com Seletor de Mês
+const PageHeaderWithMonthSelector = ({ 
+  title, 
+  icon, 
+  subtitle, 
+  selectedMonth, 
+  selectedYear, 
+  onMonthChange 
+}) => {
+  const getMonthName = (month) => {
+    const months = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return months[month - 1];
+  };
+
+  const changeMonth = (delta) => {
+    let newMonth = selectedMonth + delta;
+    let newYear = selectedYear;
+    
+    if (newMonth > 12) {
+      newMonth = 1;
+      newYear++;
+    } else if (newMonth < 1) {
+      newMonth = 12;
+      newYear--;
+    }
+    
+    onMonthChange(newMonth, newYear);
+  };
+
+  return (
+    <div className="month-selector-enhanced">
+      <button 
+        className="month-nav-btn prev"
+        onClick={() => changeMonth(-1)}
+        title="Mês anterior"
+      >
+        ‹
+      </button>
+      <div className="month-display-enhanced">
+        <div className="current-month">
+          <h2>{icon} {title} - {getMonthName(selectedMonth)} {selectedYear}</h2>
+          <p>{subtitle}</p>
+        </div>
+      </div>
+      <button 
+        className="month-nav-btn next"
+        onClick={() => changeMonth(1)}
+        title="Próximo mês"
+      >
+        ›
+      </button>
+    </div>
+  );
+};
+
 // Modal de Nova Transação
 const AddTransactionModal = ({ onSave, onCancel }) => {
   const today = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
@@ -1456,28 +1514,14 @@ const DashboardPage = () => {
 
   return (
     <div className="page">
-      <div className="month-selector-enhanced">
-        <button 
-          className="month-nav-btn prev"
-          onClick={() => changeMonth(-1)}
-          title="Mês anterior"
-        >
-          ‹
-        </button>
-        <div className="month-display-enhanced">
-          <div className="current-month">
-            <h2>📊 Dashboard - {getMonthName(selectedMonth)} {selectedYear}</h2>
-            <p>Resumo financeiro do período</p>
-          </div>
-        </div>
-        <button 
-          className="month-nav-btn next"
-          onClick={() => changeMonth(1)}
-          title="Próximo mês"
-        >
-          ›
-        </button>
-      </div>
+      <PageHeaderWithMonthSelector 
+        title="Dashboard"
+        icon="📊"
+        subtitle="Resumo financeiro do período"
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        onMonthChange={loadData}
+      />
 
       <div className="stats-grid">
         <div className="stats-row">
@@ -1895,29 +1939,14 @@ const AllTransactionsPage = () => {
 
   return (
     <div className="page">
-      {/* Navegação de mês */}
-      <div className="month-selector-enhanced">
-        <button 
-          className="month-nav-btn prev"
-          onClick={() => changeMonth(-1)}
-          title="Mês anterior"
-        >
-          ‹
-        </button>
-        <div className="month-display-enhanced">
-          <div className="current-month">
-            <h2>📊 Transações - {getMonthName(selectedMonth)} {selectedYear}</h2>
-            <p>Visualizando movimentações do período</p>
-          </div>
-        </div>
-        <button 
-          className="month-nav-btn next"
-          onClick={() => changeMonth(1)}
-          title="Próximo mês"
-        >
-          ›
-        </button>
-      </div>
+      <PageHeaderWithMonthSelector 
+        title="Todas Transações"
+        icon="📊"
+        subtitle="Gerenciar todas as transações do período"
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        onMonthChange={loadTransactions}
+      />
 
       {/* Lista de transações */}
       <div className="transactions-container-enhanced">
@@ -2176,17 +2205,23 @@ const CreditCardPage = () => {
   const [selectedCard, setSelectedCard] = useState(null);
   const [cardToDelete, setCardToDelete] = useState(null);
   const [expandedCard, setExpandedCard] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   // Carregar cartões e transações
-  const loadData = async () => {
+  const loadData = async (month = selectedMonth, year = selectedYear) => {
     try {
       // Carregar cartões cadastrados
       const cardsResponse = await axios.get('/credit-cards');
       setCreditCards(cardsResponse.data || []);
 
-      // Carregar transações para calcular gastos
-      const transactionsResponse = await axios.get('/transactions');
+      // Carregar transações para calcular gastos (filtradas por mês)
+      const transactionsResponse = await axios.get(`/transactions?month=${month}&year=${year}`);
       setTransactions(transactionsResponse.data || []);
+      
+      // Atualizar states se foram passados parâmetros
+      if (month !== selectedMonth) setSelectedMonth(month);
+      if (year !== selectedYear) setSelectedYear(year);
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -2386,8 +2421,16 @@ const CreditCardPage = () => {
 
   return (
     <div className="page">
+      <PageHeaderWithMonthSelector 
+        title="Meus Cartões"
+        icon="💳"
+        subtitle="Gestão dos cartões de crédito e gastos do período"
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        onMonthChange={loadData}
+      />
+      
       <div className="page-header">
-        <h1 className="page-title">💳 Meus Cartões</h1>
         <button 
           className="btn btn-primary"
           onClick={() => setShowAddCardModal(true)}
@@ -2515,14 +2558,15 @@ const CreditCardPage = () => {
             })}
           </div>
         ) : (
-          <div className="no-cards">
-            <h3>💳 Nenhum cartão cadastrado</h3>
-            <p>Adicione seus cartões para controlar seus gastos</p>
+          <div className="no-transactions-enhanced">
+            <div className="empty-state-icon">💳</div>
+            <h3>Nenhum cartão cadastrado</h3>
+            <p>Adicione seus cartões para controlar seus gastos do período</p>
             <button 
-              className="btn btn-primary"
+              className="btn-add-enhanced"
               onClick={() => setShowAddCardModal(true)}
             >
-              + Adicionar Primeiro Cartão
+              ➕ Adicionar Primeiro Cartão
             </button>
           </div>
         )}
@@ -3007,6 +3051,8 @@ const BanksPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedBank, setSelectedBank] = useState(null);
   const [bankToDelete, setBankToDelete] = useState(null);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   
   // Estados para o modal de transações do banco
   const [showBankModal, setShowBankModal] = useState(false);
@@ -3105,15 +3151,19 @@ const BanksPage = () => {
   };
 
   // Carregar bancos e transações
-  const loadData = async () => {
+  const loadData = async (month = selectedMonth, year = selectedYear) => {
     try {
       // Carregar bancos cadastrados
       const banksResponse = await axios.get('/banks');
       setBanks(banksResponse.data || []);
 
-      // Carregar transações para calcular saldos
-      const transactionsResponse = await axios.get('/transactions');
+      // Carregar transações para calcular saldos (filtradas por mês)
+      const transactionsResponse = await axios.get(`/transactions?month=${month}&year=${year}`);
       setTransactions(transactionsResponse.data || []);
+      
+      // Atualizar states se foram passados parâmetros
+      if (month !== selectedMonth) setSelectedMonth(month);
+      if (year !== selectedYear) setSelectedYear(year);
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -3214,8 +3264,16 @@ const BanksPage = () => {
 
   return (
     <div className="page">
+      <PageHeaderWithMonthSelector 
+        title="Meus Bancos"
+        icon="🏦"
+        subtitle="Gestão de contas bancárias e movimentações do período"
+        selectedMonth={selectedMonth}
+        selectedYear={selectedYear}
+        onMonthChange={loadData}
+      />
+      
       <div className="page-header">
-        <h1 className="page-title">🏦 Meus Bancos</h1>
         <button 
           className="btn btn-primary"
           onClick={() => setShowAddBankModal(true)}
@@ -3327,14 +3385,15 @@ const BanksPage = () => {
             })}
           </div>
         ) : (
-          <div className="no-banks">
-            <h3>🏦 Nenhum banco cadastrado</h3>
-            <p>Adicione seus bancos para começar a organizar suas finanças</p>
+          <div className="no-transactions-enhanced">
+            <div className="empty-state-icon">🏦</div>
+            <h3>Nenhum banco cadastrado</h3>
+            <p>Adicione seus bancos para organizar movimentações do período</p>
             <button 
-              className="btn btn-primary"
+              className="btn-add-enhanced"
               onClick={() => setShowAddBankModal(true)}
             >
-              + Adicionar Primeiro Banco
+              ➕ Adicionar Primeiro Banco
             </button>
           </div>
         )}
@@ -3740,8 +3799,10 @@ const SettingsPage = () => {
 
   return (
     <div className="page">
-      <h1 className="page-title">⚙️ Configurações</h1>
-      <p className="page-subtitle">Perfil e preferências</p>
+      <div className="page-header-simple">
+        <h1 className="page-title">⚙️ Configurações</h1>
+        <p className="page-subtitle">Perfil e preferências do sistema</p>
+      </div>
 
       <div className="settings-container">
         {/* Perfil do Usuário */}
