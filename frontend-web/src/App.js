@@ -36,6 +36,24 @@ axios.interceptors.response.use(
 const AuthContext = createContext();
 const useAuth = () => useContext(AuthContext);
 
+// Context para Modal de Nova Transação
+const NewTransactionContext = createContext();
+const useNewTransaction = () => useContext(NewTransactionContext);
+
+// Provider para Modal de Nova Transação
+const NewTransactionProvider = ({ children }) => {
+  const [showAddModal, setShowAddModal] = useState(false);
+  
+  const openModal = () => setShowAddModal(true);
+  const closeModal = () => setShowAddModal(false);
+  
+  return (
+    <NewTransactionContext.Provider value={{ showAddModal, openModal, closeModal }}>
+      {children}
+    </NewTransactionContext.Provider>
+  );
+};
+
 // Provider de autenticação
 const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -119,6 +137,7 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { openModal } = useNewTransaction();
 
   const menuItems = [
     { key: 'dashboard', label: 'Dashboard', icon: '🏠', path: '/dashboard', description: 'Visão geral' },
@@ -150,11 +169,7 @@ const Sidebar = () => {
           <div className="nav-action-button">
             <button 
               className="btn-new-transaction"
-              onClick={() => {
-                // Precisamos acessar o setShowAddModal do componente TransactionsPage
-                // Vamos implementar isso via contexto ou prop drilling
-                window.dispatchEvent(new CustomEvent('openNewTransaction'));
-              }}
+              onClick={openModal}
             >
               <span className="btn-icon">➕</span>
               <span className="btn-text">Nova Transação</span>
@@ -1422,6 +1437,17 @@ const DashboardPage = () => {
 
   useEffect(() => {
     loadData();
+    
+    // Listener para recarregar quando uma transação for adicionada
+    const handleTransactionAdded = () => {
+      loadData();
+    };
+    
+    window.addEventListener('transactionAdded', handleTransactionAdded);
+    
+    return () => {
+      window.removeEventListener('transactionAdded', handleTransactionAdded);
+    };
   }, []);
 
   if (loading) {
@@ -2341,6 +2367,17 @@ const CreditCardPage = () => {
 
   useEffect(() => {
     loadData();
+    
+    // Listener para recarregar quando uma transação for adicionada
+    const handleTransactionAdded = () => {
+      loadData();
+    };
+    
+    window.addEventListener('transactionAdded', handleTransactionAdded);
+    
+    return () => {
+      window.removeEventListener('transactionAdded', handleTransactionAdded);
+    };
   }, []);
 
   if (loading) {
@@ -3158,6 +3195,17 @@ const BanksPage = () => {
 
   useEffect(() => {
     loadData();
+    
+    // Listener para recarregar quando uma transação for adicionada
+    const handleTransactionAdded = () => {
+      loadData();
+    };
+    
+    window.addEventListener('transactionAdded', handleTransactionAdded);
+    
+    return () => {
+      window.removeEventListener('transactionAdded', handleTransactionAdded);
+    };
   }, []);
 
   if (loading) {
@@ -3734,6 +3782,30 @@ const SettingsPage = () => {
   );
 };
 
+// Modal Global de Nova Transação
+const GlobalNewTransactionModal = () => {
+  const { showAddModal, closeModal } = useNewTransaction();
+  
+  const handleSave = async (transactionData) => {
+    try {
+      await axios.post('/transactions', transactionData);
+      closeModal();
+      
+      // Recarregar dados das páginas
+      window.dispatchEvent(new CustomEvent('transactionAdded'));
+      
+      alert('Transação adicionada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao adicionar transação:', error);
+      alert('Erro ao adicionar transação: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  if (!showAddModal) return null;
+
+  return <AddTransactionModal onSave={handleSave} onCancel={closeModal} />;
+};
+
 // Layout principal com sidebar
 const MainLayout = ({ children }) => {
   return (
@@ -3750,21 +3822,23 @@ const MainLayout = ({ children }) => {
 const App = () => {
   return (
     <AuthProvider>
-      <Router>
-        <div className="app">
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={<Navigate to="/dashboard" />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <DashboardPage />
-                  </MainLayout>
-                </ProtectedRoute>
-              }
-            />
+      <NewTransactionProvider>
+        <GlobalNewTransactionModal />
+        <Router>
+          <div className="app">
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/" element={<Navigate to="/dashboard" />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <MainLayout>
+                      <DashboardPage />
+                    </MainLayout>
+                  </ProtectedRoute>
+                }
+              />
             <Route
               path="/all-transactions"
               element={
@@ -3818,6 +3892,7 @@ const App = () => {
           </Routes>
         </div>
       </Router>
+    </NewTransactionProvider>
     </AuthProvider>
   );
 };
