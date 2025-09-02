@@ -61,9 +61,9 @@ O **FinControl** é um sistema completo de gestão financeira pessoal que oferec
 cd FinancialAppExpo
 npm start
 
-# React Native App
-cd FinancialAppMobile
-npx react-native run-android
+# Expo App
+cd FinancialAppExpo
+npx expo start
 ```
 
 ---
@@ -107,14 +107,6 @@ npm install
 npm start
 ```
 
-#### 4️⃣ **Mobile App Setup (React Native)**
-```bash
-cd FinancialAppMobile
-npm install
-npx react-native run-android  # Android
-npx react-native run-ios       # iOS
-```
-
 </details>
 
 ---
@@ -128,7 +120,7 @@ npx react-native run-ios       # iOS
 ![Axios](https://img.shields.io/badge/Axios-HTTP-5A29E4?style=flat-square)
 
 ### 📱 **Mobile**
-![React Native](https://img.shields.io/badge/React%20Native-0.72-61DAFB?style=flat-square&logo=react)
+![Expo](https://img.shields.io/badge/Expo-53.0-000020?style=flat-square&logo=expo)
 ![Expo](https://img.shields.io/badge/Expo-49.x-000020?style=flat-square&logo=expo)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript)
 
@@ -200,7 +192,7 @@ FinControl/
 ├── 📁 FinancialAppExpo/     # App Mobile Expo
 │   ├── App.js              # App principal
 │   └── package.json        # Dependências Expo
-├── 📁 FinancialAppMobile/   # App Native React Native
+├── 📁 FinancialAppExpo/     # App Mobile Expo
 │   ├── App.tsx             # App principal
 │   ├── android/            # Configurações Android
 │   ├── ios/                # Configurações iOS
@@ -234,7 +226,7 @@ cd FinancialAppExpo && npm start
 cd frontend-web && npm run build
 
 # Build mobile para produção
-cd FinancialAppMobile && npx react-native build-android
+cd FinancialAppExpo && npx expo build
 ```
 
 ---

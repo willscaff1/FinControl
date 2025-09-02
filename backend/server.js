@@ -51,6 +51,8 @@ const BankSchema = new mongoose.Schema({
   name: String,
   icon: String,
   accountType: String,
+  accountNumber: String,
+  agency: String,
   notes: String,
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
@@ -58,6 +60,7 @@ const BankSchema = new mongoose.Schema({
 // Credit Card Schema
 const CreditCardSchema = new mongoose.Schema({
   name: String,
+  bank: String,
   lastDigits: String,
   limit: Number,
   dueDay: Number,
@@ -111,11 +114,8 @@ const generateRecurringTransactions = async (userId, month, year) => {
     const currentDate = new Date();
     const requestedDate = new Date(year, month - 1, 1);
     
-    // Só gerar transações para o mês atual ou futuro
-    if (requestedDate < new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)) {
-      console.log(`⏪ Pulando mês anterior: ${month}/${year}`);
-      return; // Não gera transações para meses anteriores
-    }
+    // REMOVER LIMITAÇÃO - Permitir gerar transações fixas para qualquer mês
+    console.log(`📅 Gerando transações para: ${month}/${year}`);
 
     const startOfMonth = new Date(year, month - 1, 1);
     const endOfMonth = new Date(year, month, 0);
@@ -149,19 +149,26 @@ const generateRecurringTransactions = async (userId, month, year) => {
         const transactionDate = new Date(year, month - 1, targetDay, 12, 0, 0); // Definir meio-dia para evitar problemas de fuso
 
         console.log(`➕ Criando nova transação: ${recurringTx.description} para ${transactionDate.toLocaleDateString()}`);
+        console.log(`🔍 Template banco: ${recurringTx.bank}, cartão: ${recurringTx.creditCard}, método: ${recurringTx.paymentMethod}`);
 
-        // Criar a nova transação para este mês
+        // Criar a nova transação para este mês - COPIAR TODOS OS CAMPOS
         const newTransaction = new Transaction({
           description: recurringTx.description,
           amount: recurringTx.amount,
           type: recurringTx.type,
           category: recurringTx.category,
           paymentMethod: recurringTx.paymentMethod,
+          bank: recurringTx.bank, // IMPORTANTE: Copiar o banco
+          creditCard: recurringTx.creditCard, // IMPORTANTE: Copiar o cartão
+          notes: recurringTx.notes,
           userId,
           date: transactionDate,
           isRecurring: false, // Esta é a transação gerada, não o template
+          isFixed: true, // Marcar como transação fixa
           recurringParentId: recurringTx._id
         });
+
+        console.log(`✅ Nova transação criada com banco: ${newTransaction.bank}`);
 
         await newTransaction.save();
         console.log(`✅ Transação criada: ${newTransaction._id}`);
@@ -309,9 +316,97 @@ app.get('/api/transactions', auth, async (req, res) => {
   }
 });
 
+// ENDPOINT PARA CORRIGIR TRANSAÇÕES FIXAS SEM BANCO
+app.get('/api/fix-recurring-transactions', auth, async (req, res) => {
+  try {
+    console.log('🔧 INICIANDO CORREÇÃO FORÇADA...');
+    
+    // PASSO 1: Corrigir todas as transações do Salário
+    const salarioUpdated = await Transaction.updateMany(
+      { 
+        userId: req.user._id,
+        description: { $regex: /salário/i }
+      },
+      { 
+        $set: { 
+          bank: 'Bradesco',
+          paymentMethod: 'debito'
+        } 
+      }
+    );
+    console.log(`� Salário corrigido: ${salarioUpdated.modifiedCount} transações`);
+    
+    // PASSO 2: Corrigir todas as transações do BeeVale
+    const beeValeUpdated = await Transaction.updateMany(
+      { 
+        userId: req.user._id,
+        description: { $regex: /beevale/i }
+      },
+      { 
+        $set: { 
+          bank: 'Bradesco',
+          paymentMethod: 'debito'
+        } 
+      }
+    );
+    console.log(`🍯 BeeVale corrigido: ${beeValeUpdated.modifiedCount} transações`);
+    
+    // PASSO 3: Corrigir todas as transações do Saldo Mes Anterior
+    const saldoUpdated = await Transaction.updateMany(
+      { 
+        userId: req.user._id,
+        description: { $regex: /saldo.*mes.*anterior/i }
+      },
+      { 
+        $set: { 
+          bank: 'Bradesco',
+          paymentMethod: 'debito'
+        } 
+      }
+    );
+    console.log(`💳 Saldo Mes Anterior corrigido: ${saldoUpdated.modifiedCount} transações`);
+    
+    // PASSO 4: Corrigir transações sem banco que tenham método débito
+    const debitoUpdated = await Transaction.updateMany(
+      { 
+        userId: req.user._id,
+        paymentMethod: 'debito',
+        $or: [
+          { bank: { $exists: false } },
+          { bank: null },
+          { bank: undefined },
+          { bank: '' }
+        ]
+      },
+      { 
+        $set: { 
+          bank: 'Bradesco'
+        } 
+      }
+    );
+    console.log(`🏦 Débito sem banco corrigido: ${debitoUpdated.modifiedCount} transações`);
+    
+    console.log('✅ CORREÇÃO FINALIZADA!');
+    res.json({ 
+      success: true, 
+      message: 'Transações corrigidas!',
+      salario: salarioUpdated.modifiedCount,
+      beeVale: beeValeUpdated.modifiedCount,
+      saldo: saldoUpdated.modifiedCount,
+      debito: debitoUpdated.modifiedCount
+    });
+  } catch (error) {
+    console.error('Erro ao corrigir:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/transactions', auth, async (req, res) => {
   try {
+    console.log('📥 Recebendo dados da transação:', req.body);
+    
     const transactionData = { ...req.body, userId: req.user._id };
+    
     // Corrigir problema de fuso horário - adicionar horário meio-dia para evitar mudança de data
     let transactionDate;
     if (transactionData.date) {
@@ -320,23 +415,45 @@ app.post('/api/transactions', auth, async (req, res) => {
       transactionDate = new Date();
     }
     
+    console.log('📅 Data processada:', transactionDate);
+    
     // Se for transação fixa, criar o template
     if (transactionData.isRecurring) {
       // Usar o dia da transação como dia de repetição
       const recurringDay = transactionDate.getDate();
       
-      // Criar o template da transação fixa
+      console.log(`💾 Criando template fixa com banco: ${transactionData.bank}, método: ${transactionData.paymentMethod}`);
+      
+      // Criar o template da transação fixa - GARANTIR TODOS OS CAMPOS
       const recurringTemplate = new Transaction({
-        ...transactionData,
+        description: transactionData.description,
+        amount: transactionData.amount,
+        type: transactionData.type,
+        category: transactionData.category,
+        paymentMethod: transactionData.paymentMethod,
+        bank: transactionData.bank, // FORÇAR campo banco
+        creditCard: transactionData.creditCard, // FORÇAR campo cartão
+        notes: transactionData.notes,
+        userId: req.user._id,
         isRecurring: true,
         recurringDay: recurringDay,
         date: transactionDate
       });
       await recurringTemplate.save();
       
+      console.log(`✅ Template salvo com banco: ${recurringTemplate.bank}`);
+      
       // Criar também a transação para o mês atual
       const currentTransaction = new Transaction({
-        ...transactionData,
+        description: transactionData.description,
+        amount: transactionData.amount,
+        type: transactionData.type,
+        category: transactionData.category,
+        paymentMethod: transactionData.paymentMethod,
+        bank: transactionData.bank, // FORÇAR campo banco
+        creditCard: transactionData.creditCard, // FORÇAR campo cartão
+        notes: transactionData.notes,
+        userId: req.user._id,
         isRecurring: false, // Esta é a transação real, não o template
         date: transactionDate,
         recurringParentId: recurringTemplate._id
@@ -825,17 +942,17 @@ app.get('/api/dashboard', auth, async (req, res) => {
     const transactions = await Transaction.find(query).sort({ date: -1 });
     
     const income = transactions
-      .filter(t => t.type === 'income')
+      .filter(t => t.type === 'receita' || t.type === 'income')
       .reduce((sum, t) => sum + t.amount, 0);
     
     // Despesas excluindo cartão de crédito (só PIX e DÉBITO)
     const expense = transactions
-      .filter(t => t.type === 'expense' && t.paymentMethod !== 'credito')
+      .filter(t => (t.type === 'despesa' || t.type === 'expense') && t.paymentMethod !== 'credito')
       .reduce((sum, t) => sum + t.amount, 0);
 
     // Total do cartão de crédito
     const creditCardTotal = transactions
-      .filter(t => t.type === 'expense' && t.paymentMethod === 'credito')
+      .filter(t => (t.type === 'despesa' || t.type === 'expense') && t.paymentMethod === 'credito')
       .reduce((sum, t) => sum + t.amount, 0);
 
     // Últimas 5 transações do período
@@ -860,82 +977,166 @@ app.get('/api/dashboard', auth, async (req, res) => {
 // Criar transações de exemplo (apenas para desenvolvimento)
 app.post('/api/seed-data', auth, async (req, res) => {
   try {
-    // Verificar se já existem transações
+    // Verificar se já existem dados
     const existingTransactions = await Transaction.find({ userId: req.user._id });
-    if (existingTransactions.length > 0) {
+    const existingBanks = await Bank.find({ userId: req.user._id });
+    const existingCards = await CreditCard.find({ userId: req.user._id });
+    
+    if (existingTransactions.length > 0 || existingBanks.length > 0 || existingCards.length > 0) {
       return res.json({ message: 'Dados de exemplo já existem' });
     }
 
+    // Criar bancos de exemplo
+    const sampleBanks = [
+      {
+        name: 'Nubank',
+        accountType: 'Conta Digital',
+        accountNumber: '12345-6',
+        agency: '0001',
+        userId: req.user._id
+      },
+      {
+        name: 'Itaú',
+        accountType: 'Conta Corrente',
+        accountNumber: '98765-4',
+        agency: '1234',
+        userId: req.user._id
+      },
+      {
+        name: 'C6 Bank',
+        accountType: 'Conta Digital',
+        accountNumber: '55555-1',
+        agency: '0260',
+        userId: req.user._id
+      }
+    ];
+
+    // Criar cartões de exemplo
+    const sampleCards = [
+      {
+        name: 'Nubank Mastercard',
+        bank: 'Nubank',
+        limit: 5000,
+        lastDigits: '1234',
+        dueDay: 15,
+        userId: req.user._id
+      },
+      {
+        name: 'Itaú Visa',
+        bank: 'Itaú',
+        limit: 3000,
+        lastDigits: '5678',
+        dueDay: 10,
+        userId: req.user._id
+      },
+      {
+        name: 'C6 Mastercard',
+        bank: 'C6 Bank',
+        limit: 2000,
+        lastDigits: '9876',
+        dueDay: 5,
+        userId: req.user._id
+      }
+    ];
+
     const sampleTransactions = [
+      // Receitas
       {
         description: 'Salário',
         amount: 5000,
         type: 'income',
-        category: 'salario',
+        category: 'Salário',
+        paymentMethod: 'pix',
+        bank: 'Nubank',
         userId: req.user._id,
-        date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // 1 dia atrás
-      },
-      {
-        description: 'Almoço restaurante',
-        amount: 45.50,
-        type: 'expense',
-        category: 'alimentacao',
-        userId: req.user._id,
-        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) // 2 dias atrás
-      },
-      {
-        description: 'Uber',
-        amount: 25.30,
-        type: 'expense',
-        category: 'transporte',
-        userId: req.user._id,
-        date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) // 3 dias atrás
+        date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000)
       },
       {
         description: 'Freelance',
         amount: 800,
         type: 'income',
-        category: 'freelance',
+        category: 'Freelance',
+        paymentMethod: 'pix',
+        bank: 'Itaú',
         userId: req.user._id,
-        date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000) // 4 dias atrás
+        date: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000)
+      },
+      // Despesas com cartão
+      {
+        description: 'Almoço restaurante',
+        amount: 45.50,
+        type: 'expense',
+        category: 'Alimentação',
+        paymentMethod: 'credito',
+        creditCard: 'Nubank Mastercard',
+        userId: req.user._id,
+        date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
       },
       {
         description: 'Supermercado',
         amount: 156.80,
         type: 'expense',
-        category: 'alimentacao',
+        category: 'Alimentação',
+        paymentMethod: 'credito',
+        creditCard: 'Itaú Visa',
         userId: req.user._id,
-        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000) // 5 dias atrás
+        date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000)
       },
       {
         description: 'Cinema',
         amount: 35.00,
         type: 'expense',
-        category: 'lazer',
+        category: 'Lazer',
+        paymentMethod: 'credito',
+        creditCard: 'C6 Mastercard',
         userId: req.user._id,
-        date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000) // 6 dias atrás
+        date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
       },
+      // Despesas com débito
       {
-        description: 'Consulta médica',
-        amount: 150.00,
+        description: 'Uber',
+        amount: 25.30,
         type: 'expense',
-        category: 'saude',
+        category: 'Transporte',
+        paymentMethod: 'debito',
+        bank: 'Nubank',
         userId: req.user._id,
-        date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) // 7 dias atrás
+        date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
       },
       {
-        description: 'Venda produto',
-        amount: 250,
-        type: 'income',
-        category: 'venda',
+        description: 'Farmácia',
+        amount: 67.90,
+        type: 'expense',
+        category: 'Saúde',
+        paymentMethod: 'pix',
+        bank: 'Itaú',
         userId: req.user._id,
-        date: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) // 8 dias atrás
+        date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
       }
     ];
 
+    // Inserir bancos
+    await Bank.insertMany(sampleBanks);
+    console.log('✅ Bancos de exemplo criados');
+
+    // Inserir cartões
+    await CreditCard.insertMany(sampleCards);
+    console.log('✅ Cartões de exemplo criados');
+
+    // Inserir transações
     await Transaction.insertMany(sampleTransactions);
-    res.json({ message: 'Dados de exemplo criados com sucesso!', count: sampleTransactions.length });
+    console.log('✅ Transações de exemplo criadas');
+
+    res.json({ 
+      message: 'Dados de exemplo criados com sucesso!',
+      created: {
+        banks: sampleBanks.length,
+        cards: sampleCards.length,
+        transactions: sampleTransactions.length
+      }
+    });
   } catch (error) {
+    console.error('Erro ao criar dados de exemplo:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -948,7 +1149,30 @@ app.post('/api/seed-data', auth, async (req, res) => {
 app.get('/api/credit-cards', auth, async (req, res) => {
   try {
     const creditCards = await CreditCard.find({ userId: req.user._id }).sort({ name: 1 });
-    res.json(creditCards);
+    
+    // Calcular valor usado para cada cartão baseado nas transações (TOTAL, não só mês atual)
+    const cardsWithUsedAmount = await Promise.all(creditCards.map(async (card) => {
+      // Buscar TODAS as transações do cartão (total usado)
+      const cardTransactions = await Transaction.find({
+        userId: req.user._id,
+        creditCard: card.name,
+        paymentMethod: 'credito',
+        type: 'expense' // Apenas despesas contam para o limite usado
+      });
+      
+      // Calcular valor total usado (histórico completo)
+      const usedAmount = cardTransactions.reduce((sum, transaction) => {
+        return sum + (transaction.amount || 0);
+      }, 0);
+      
+      return {
+        ...card.toObject(),
+        usedAmount: usedAmount,
+        bank: card.bank || card.name.split(' ')[0] // Extrai o banco do nome se não tiver
+      };
+    }));
+    
+    res.json(cardsWithUsedAmount);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1009,7 +1233,48 @@ app.delete('/api/credit-cards/:id', auth, async (req, res) => {
 app.get('/api/banks', auth, async (req, res) => {
   try {
     const banks = await Bank.find({ userId: req.user._id }).sort({ name: 1 });
-    res.json(banks);
+    
+    // Calcular saldo para cada banco baseado nas transações DO MÊS ATUAL (incluindo fixas)
+    const banksWithBalance = await Promise.all(banks.map(async (bank) => {
+      // Data atual para filtrar apenas o mês atual
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // MongoDB mês é 1-12
+      const currentYear = now.getFullYear();
+      
+      // PRIMEIRO: Gerar transações fixas para o mês atual
+      await generateRecurringTransactions(req.user._id, currentMonth, currentYear);
+      
+      // SEGUNDO: Buscar TODAS as transações do banco no mês atual (fixas + normais)
+      const startDate = new Date(currentYear, currentMonth - 1, 1);
+      const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
+      
+      const bankTransactions = await Transaction.find({
+        userId: req.user._id,
+        bank: bank.name,
+        paymentMethod: { $in: ['debito', 'pix'] },
+        date: { $gte: startDate, $lte: endDate },
+        isRecurring: { $ne: true } // Excluir apenas os templates, incluir as instâncias
+      });
+      
+      // Calcular saldo do mês atual (RECEITAS SOMAM, DESPESAS SUBTRAEM)
+      const balance = bankTransactions.reduce((sum, transaction) => {
+        if (transaction.type === 'income') {
+          return sum + (transaction.amount || 0); // RECEITAS SOMAM
+        } else {
+          return sum - (transaction.amount || 0); // DESPESAS SUBTRAEM
+        }
+      }, 0);
+      
+      return {
+        ...bank.toObject(),
+        balance: balance,
+        type: bank.accountType || 'Conta Corrente',
+        accountNumber: bank.accountNumber || '',
+        agency: bank.agency || ''
+      };
+    }));
+    
+    res.json(banksWithBalance);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

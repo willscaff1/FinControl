@@ -1,0 +1,5 @@
+src/App.js
+node_modules/
+build/
+dist/
+*.min.js
