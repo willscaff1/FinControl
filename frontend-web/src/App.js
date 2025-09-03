@@ -2213,7 +2213,13 @@ const CreditCardPage = () => {
     try {
       // Carregar cartões cadastrados
       const cardsResponse = await axios.get('/credit-cards');
-      setCreditCards(cardsResponse.data || []);
+      // Ordenar cartões por data de criação (mais novos primeiro)
+      const sortedCards = (cardsResponse.data || []).sort((a, b) => {
+        const dateA = new Date(a.createdAt || a._id);
+        const dateB = new Date(b.createdAt || b._id);
+        return dateB - dateA; // Mais novos primeiro
+      });
+      setCreditCards(sortedCards);
 
       // Carregar transações para calcular gastos (filtradas por mês)
       const transactionsResponse = await axios.get(`/transactions?month=${month}&year=${year}`);
@@ -2430,16 +2436,7 @@ const CreditCardPage = () => {
         onMonthChange={loadData}
       />
       
-      <div className="page-header">
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowAddCardModal(true)}
-        >
-          + Adicionar Cartão
-        </button>
-      </div>
-
-      <div className="cards-container">
+      <div className="transactions-container-enhanced">
         {creditCards.length > 0 ? (
           <div className="cards-grid">
             {creditCards.map((card, index) => {
@@ -2556,6 +2553,17 @@ const CreditCardPage = () => {
                 </div>
               );
             })}
+            
+            {/* Card pontilhado para adicionar novo cartão - À DIREITA */}
+            <div className="credit-card-simple add-card-button" onClick={() => setShowAddCardModal(true)}>
+              <div className="card-content-simple add-card-content">
+                <div className="add-card-icon">➕</div>
+                <div className="add-card-text">
+                  <h3>Adicionar Cartão</h3>
+                  <p>Novo cartão de crédito</p>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="no-transactions-enhanced">
@@ -3155,7 +3163,13 @@ const BanksPage = () => {
     try {
       // Carregar bancos cadastrados
       const banksResponse = await axios.get('/banks');
-      setBanks(banksResponse.data || []);
+      // Ordenar bancos por data de criação (mais novos primeiro)
+      const sortedBanks = (banksResponse.data || []).sort((a, b) => {
+        const dateA = new Date(a.createdAt || a._id);
+        const dateB = new Date(b.createdAt || b._id);
+        return dateB - dateA; // Mais novos primeiro
+      });
+      setBanks(sortedBanks);
 
       // Carregar transações para calcular saldos (filtradas por mês)
       const transactionsResponse = await axios.get(`/transactions?month=${month}&year=${year}`);
@@ -3273,16 +3287,7 @@ const BanksPage = () => {
         onMonthChange={loadData}
       />
       
-      <div className="page-header">
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowAddBankModal(true)}
-        >
-          + Adicionar Banco
-        </button>
-      </div>
-
-      <div className="banks-container">
+      <div className="transactions-container-enhanced">
         {banks.length > 0 ? (
           <div className="banks-grid">
             {banks.map((bank) => {
@@ -3383,6 +3388,17 @@ const BanksPage = () => {
                 </div>
               );
             })}
+            
+            {/* Card pontilhado para adicionar novo banco - À DIREITA */}
+            <div className="bank-card add-bank-button" onClick={() => setShowAddBankModal(true)}>
+              <div className="bank-card-content add-bank-content">
+                <div className="add-bank-icon">➕</div>
+                <div className="add-bank-text">
+                  <h3>Adicionar Banco</h3>
+                  <p>Nova conta bancária</p>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="no-transactions-enhanced">
