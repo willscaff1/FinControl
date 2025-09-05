@@ -21,6 +21,21 @@
   color: #999;
 }
 
+.form-input-disabled {
+  background-color: #f8f9fa !important;
+  border-color: #dee2e6 !important;
+  color: #6c757d !important;
+  cursor: not-allowed;
+}
+
+.form-help {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #6c757d;
+  font-style: italic;
+}
+
 /* Estilos para botões de modal de exclusão */
 .btn-warning {
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
@@ -1492,19 +1507,20 @@
 }
 
 /* ========================================= */
-/* 💳 CARTÕES DE CRÉDITO SIMPLES - RETANGULAR */
+/* 💳 CARTÕES DE CRÉDITO RETANGULARES - LAYOUT REORGANIZADO */
 /* ========================================= */
 
 .cards-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-  gap: 1.5rem;
-  padding: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+  gap: 2.5rem;
+  padding: 2rem;
+  align-items: start;
 }
 
 .credit-card-simple {
   width: 100%;
-  max-width: 380px;
+  max-width: 520px;
   margin: 0 auto;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -1517,15 +1533,15 @@
 
 .card-content-simple {
   width: 100%;
+  height: 400px; /* Altura mantida */
   border-radius: 16px;
-  padding: 1.5rem;
+  padding: 1.4rem; /* Padding aumentado para melhor distribuição */
   color: white;
   position: relative;
-  min-height: 260px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  justify-content: space-between; /* Distribuição equilibrada */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
   transition: all 0.3s ease;
   overflow: hidden;
 }
@@ -1544,57 +1560,60 @@
   border-radius: 16px;
 }
 
+/* Header com nome do cartão BEM EM CIMA à esquerda e botões à direita */
 .card-header-simple {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
-  z-index: 2;
+  align-items: flex-start; /* Alinhamento no topo */
+  height: 40px; /* Altura ajustada */
+  margin-bottom: 0.5rem; /* Margem reduzida para subir dados */
+  z-index: 3;
   position: relative;
 }
 
-.card-info-simple {
-  flex: 1;
+.card-name-header {
+  display: flex;
+  align-items: flex-start; /* Alinhamento no topo */
 }
 
-.card-name-simple {
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin: 0 0 0.5rem 0;
+.card-name-top {
+  font-size: 1.5rem; /* Tamanho aumentado para mais destaque */
+  font-weight: 900; /* Peso máximo */
   color: white;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.card-number-simple {
-  font-size: 1.1rem;
-  font-weight: 400;
-  letter-spacing: 0.1rem;
-  font-family: 'SF Mono', 'Monaco', monospace;
-  opacity: 0.9;
-  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 3px 10px rgba(0, 0, 0, 0.8); /* Sombra mais forte */
+  text-transform: uppercase;
+  letter-spacing: 0.06rem;
+  line-height: 1;
+  margin: 0;
+  position: absolute; /* Posicionamento absoluto para controle total */
+  top: 0; /* BEM no topo */
+  left: 0; /* BEM à esquerda */
 }
 
 .card-actions {
   display: flex;
   gap: 0.5rem;
-  opacity: 0.7;
+  opacity: 0; /* Invisível por padrão */
   transition: all 0.3s ease;
+  transform: translateY(-5px); /* Efeito suave */
 }
 
 .credit-card-simple:hover .card-actions {
-  opacity: 1;
+  opacity: 1; /* Aparece no hover */
+  transform: translateY(0);
 }
 
 .action-btn {
   background: rgba(255, 255, 255, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  padding: 0.5rem;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
   color: white;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   transition: all 0.3s ease;
   backdrop-filter: blur(10px);
+  line-height: 1;
 }
 
 .action-btn:hover {
@@ -1602,80 +1621,250 @@
   transform: scale(1.05);
 }
 
-.card-stats-simple {
-  flex: 1;
+/* Dados financeiros - campos maiores e mais acima */
+.card-financial-data {
   z-index: 2;
   position: relative;
+  height: 130px; /* Altura aumentada para cards maiores */
+  margin-top: 0.3rem; /* Mais para cima */
+  margin-bottom: 0.6rem;
+  padding: 0 1rem;
 }
 
-.stats-row-simple {
+.financial-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 1rem;
+  margin-bottom: 0.8rem;
+  gap: 0.8rem; /* Gap aumentado */
+  height: 55px; /* Altura aumentada para cards maiores */
 }
 
-.stat-simple {
+.financial-item {
   flex: 1;
   text-align: center;
-  padding: 0 0.5rem;
+  background: rgba(255, 255, 255, 0.18); /* Fundo mais visível */
+  padding: 0.6rem 0.4rem; /* Padding aumentado */
+  border-radius: 10px; /* Bordas mais arredondadas */
+  backdrop-filter: blur(8px); /* Blur aumentado */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 50px; /* Altura mínima aumentada */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); /* Sombra para destaque */
 }
 
-.stat-label-simple {
-  font-size: 0.8rem;
-  opacity: 0.8;
-  margin-bottom: 0.3rem;
-  font-weight: 500;
+.financial-label {
+  font-size: 0.8rem; /* Tamanho aumentado */
+  font-weight: 600;
   color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.04rem;
+  margin-bottom: 0.4rem; /* Mais espaçamento */
+  line-height: 1.1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
-.stat-value-simple {
-  font-size: 1rem;
+.financial-value {
+  font-size: 1.3rem; /* Valores ainda maiores */
   font-weight: 700;
   color: white;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  line-height: 1.1;
 }
 
-.stat-value-simple.expense {
+.financial-value.expense {
   color: #ff6b6b;
 }
 
-.stat-value-simple.available {
+.financial-value.available {
   color: #51cf66;
 }
 
-.stat-value-simple.committed {
+.financial-value.committed {
   color: #74c0fc;
 }
 
+/* Barra de utilização - mais grossa */
 .usage-bar-simple {
-  margin: 1.2rem 0;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
+  height: 70px; /* Altura aumentada - barra mais grossa */
+  margin-bottom: 0.8rem;
+  padding: 1rem; /* Padding aumentado */
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px; /* Bordas mais arredondadas */
+  backdrop-filter: blur(12px);
+  z-index: 2;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .usage-info-simple {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.8rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem; /* Ajustado */
+  font-weight: 800;
   color: white;
-}
-
-.usage-details {
-  font-size: 0.75rem;
-  opacity: 0.8;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  line-height: 1;
 }
 
 .progress-bar-simple {
-  height: 8px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  height: 8px; /* Ajustado */
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
   position: relative;
   overflow: hidden;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.progress-fill-simple {
+  height: 100%;
+  border-radius: 6px;
+  position: absolute;
+  top: 0;
+  transition: all 0.4s ease;
+}
+
+.progress-fill-simple.current.normal {
+  background: linear-gradient(90deg, #51cf66 0%, #40c057 100%);
+}
+
+.progress-fill-simple.current.warning {
+  background: linear-gradient(90deg, #ffd43b 0%, #fab005 100%);
+}
+
+.progress-fill-simple.current.danger {
+  background: linear-gradient(90deg, #ff6b6b 0%, #e03131 100%);
+}
+
+.progress-fill-simple.committed {
+  background: linear-gradient(90deg, #74c0fc 0%, #339af0 100%);
+  opacity: 0.8;
+}
+
+/* Footer - só número e portador, bandeira posicionada absolutamente */
+.card-footer-simple {
+  display: flex;
+  justify-content: flex-start; /* Só alinhamento à esquerda */
+  align-items: flex-end;
+  z-index: 2;
+  position: relative;
+  margin-top: auto;
+  height: 60px;
+  padding: 0 1rem;
+}
+
+.card-holder-info {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 0.4rem; /* Espaçamento entre número e portador */
+}
+
+.card-number-simple {
+  font-size: 1rem; /* Tamanho reduzido para não cortar */
+  font-weight: 600;
+  letter-spacing: 0.06rem; /* Letter-spacing reduzido */
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  margin: 0;
+  line-height: 1;
+  white-space: nowrap; /* Evita quebra de linha */
+  overflow: hidden; /* Esconde overflow */
+  text-overflow: ellipsis; /* Adiciona ... se necessário */
+}
+
+.card-holder-name {
+  font-size: 0.9rem; /* Tamanho aumentado */
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  text-transform: uppercase;
+  letter-spacing: 0.04rem;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+
+.card-brand-info {
+  text-align: right;
+  display: flex;
+  align-items: flex-end;
+  position: absolute; /* Posicionamento absoluto */
+  bottom: 0; /* BEM embaixo */
+  right: 0; /* BEM à direita */
+  padding-bottom: 0;
+}
+
+.brand-name {
+  font-size: 1.2rem; /* Tamanho aumentado para destaque máximo */
+  font-weight: 900; /* Peso máximo */
+  color: rgba(255, 255, 255, 1); /* Cor totalmente branca */
+  text-transform: uppercase;
+  letter-spacing: 0.06rem;
+  text-shadow: 0 3px 8px rgba(0, 0, 0, 0.8); /* Sombra forte */
+  line-height: 1;
+}
+
+/* Cores por bandeira */
+.card-content-simple.visa {
+  background: linear-gradient(135deg, #1a1f71 0%, #0f4c75 100%);
+}
+
+.card-content-simple.mastercard {
+  background: linear-gradient(135deg, #eb001b 0%, #ff5f00 100%);
+}
+
+.card-content-simple.amex {
+  background: linear-gradient(135deg, #006fcf 0%, #0099cc 100%);
+}
+
+.card-content-simple.elo {
+  background: linear-gradient(135deg, #ffcb05 0%, #ff6900 100%);
+}
+
+.card-content-simple.hipercard {
+  background: linear-gradient(135deg, #cc092f 0%, #8b0000 100%);
+}
+
+.card-content-simple.default {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Estilo específico para cartões de banco */
+.card-content-simple.bank-card {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  border: 2px solid #16a085;
+}
+
+.card-content-simple.bank-card:hover {
+  border-color: #1abc9c;
+  box-shadow: 0 15px 35px rgba(22, 160, 133, 0.3);
+}
+
+.card-content-simple.bank-card .card-name-top {
+  color: #1abc9c;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.card-content-simple.bank-card .financial-label {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.card-content-simple.bank-card .financial-value.income {
+  color: #2ecc71;
+  font-weight: 600;
+}
+
+.card-content-simple.bank-card .financial-value.expense {
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+.card-content-simple.bank-card .brand-name {
+  color: #1abc9c;
+  font-weight: 700;
 }
 
 .progress-fill-simple {
@@ -3056,6 +3245,78 @@
   font-size: 1.1rem;
 }
 
+/* 🗑️ ESTILOS ESPECÍFICOS PARA MODAL DE DELETAR CARTÃO */
+.delete-confirmation-content {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.warning-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.delete-message {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.card-preview-delete {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  transition: all 0.3s ease;
+}
+
+.card-preview-delete:hover {
+  border-color: #94a3b8;
+  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+}
+
+.card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.card-digits {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.05rem;
+}
+
+.delete-warning {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.delete-warning small {
+  color: #92400e;
+  font-size: 0.9rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 .transactions-container-enhanced {
   background: white;
   border-radius: 20px;
@@ -4103,31 +4364,263 @@
   font-weight: 600;
 }
 
-/* 🎯 CARDS PONTILHADOS PARA ADICIONAR */
+/* 🎴 DASHBOARD CARDS SECTION */
+.dashboard-cards-section {
+  margin-bottom: 2rem;
+}
 
-/* Card pontilhado para adicionar cartão */
+.cards-grid-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .cards-grid-dashboard {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+    gap: 1rem;
+  }
+}
+
+/* 📊 DASHBOARD STATS MODERNOS */
+.dashboard-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin: 2rem 0;
+  padding: 0 1rem;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.stat-card-modern {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  transition: all 0.4s ease;
+  cursor: pointer;
+  height: 140px;
+}
+
+.stat-card-modern:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  opacity: 1;
+  transition: all 0.4s ease;
+}
+
+.stat-card-background::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  animation: shimmer 3s infinite;
+  opacity: 0;
+}
+
+.stat-card-modern:hover .stat-card-background::before {
+  opacity: 1;
+}
+
+@keyframes shimmer {
+  0% { transform: rotate(0deg) scale(0.8); opacity: 0; }
+  50% { transform: rotate(180deg) scale(1.2); opacity: 1; }
+  100% { transform: rotate(360deg) scale(0.8); opacity: 0; }
+}
+
+.stat-card-modern.balance-card .stat-card-background {
+  background: linear-gradient(135deg, #5a67d8 0%, #667eea 50%, #764ba2 100%);
+}
+
+.stat-card-modern.credit-card .stat-card-background {
+  background: linear-gradient(135deg, #e53e3e 0%, #f093fb 50%, #f5576c 100%);
+}
+
+.stat-card-modern.income-card .stat-card-background {
+  background: linear-gradient(135deg, #2b6cb0 0%, #4facfe 50%, #00f2fe 100%);
+}
+
+.stat-card-modern.expense-card .stat-card-background {
+  background: linear-gradient(135deg, #d53f8c 0%, #fa709a 50%, #f6ad55 100%);
+}
+
+.stat-card-modern:hover .stat-card-background {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+.stat-card-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stat-icon-modern {
+  font-size: 3rem;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.3s ease;
+}
+
+.stat-card-modern:hover .stat-icon-modern {
+  transform: rotate(10deg) scale(1.1);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.stat-info {
+  flex: 1;
+  color: white;
+}
+
+.stat-label-modern {
+  font-size: 0.9rem;
+  font-weight: 600;
+  opacity: 0.95; /* Aumentei a opacidade para melhor visibilidade */
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); /* Sombra mais forte */
+  color: rgba(255, 255, 255, 0.95); /* Branco quase opaco */
+}
+
+.stat-value-modern {
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: white; /* TODOS OS VALORES EM BRANCO PARA MELHOR CONTRASTE */
+}
+
+.stat-value-modern.positive {
+  color: white; /* Branco para melhor visibilidade */
+}
+
+.stat-value-modern.negative {
+  color: white; /* Branco para melhor visibilidade */
+}
+
+.stat-value-modern.credit {
+  color: white; /* Branco para melhor visibilidade */
+}
+
+.stat-value-modern.income {
+  color: white; /* Branco para melhor visibilidade */
+}
+
+.stat-value-modern.expense {
+  color: white; /* Branco para melhor visibilidade */
+}
+
+/* Responsivo para dashboard stats */
+@media (max-width: 768px) {
+  .stats-row {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .stat-card-modern {
+    height: 120px;
+  }
+  
+  .stat-card-content {
+    padding: 1rem;
+  }
+  
+  .stat-icon-modern {
+    width: 60px;
+    height: 60px;
+    font-size: 2rem;
+  }
+  
+  .stat-value-modern {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-stats {
+    padding: 0 0.5rem;
+  }
+  
+  .stat-card-modern {
+    height: 100px;
+  }
+  
+  .stat-value-modern {
+    font-size: 1.3rem;
+  }
+  
+  .stat-label-modern {
+    font-size: 0.8rem;
+  }
+}
+
+/* Card pontilhado para adicionar cartão - MESMO TAMANHO DOS CARTÕES */
 .add-card-button {
   border: 2px dashed #cbd5e1 !important;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
   cursor: pointer !important;
   transition: all 0.3s ease !important;
-  min-height: 180px;
+  height: 400px !important; /* MESMA ALTURA DOS CARTÕES REAIS */
+  width: 100% !important;
+  max-width: 520px !important; /* MESMA LARGURA MÁXIMA DOS CARTÕES REAIS */
+  border-radius: 16px !important; /* MESMO BORDER-RADIUS DOS CARTÕES REAIS */
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: 0 auto; /* CENTRALIZAR COMO OS CARTÕES REAIS */
 }
 
 .add-card-button:hover {
   border-color: #6366f1 !important;
   background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%) !important;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15);
+  transform: translateY(-4px); /* MESMO EFEITO DE HOVER DOS CARTÕES REAIS */
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.15); /* SOMBRA SIMILAR AOS CARTÕES */
 }
 
 .add-card-content {
   text-align: center;
-  padding: 2rem !important;
   background: none !important;
+  border: none !important;
+  height: 100% !important; /* OCUPA TODA ALTURA DO BOTÃO */
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important; /* SEM PADDING EXTRA */
+  box-shadow: none !important;
 }
 
 .add-card-icon {
@@ -4210,7 +4703,7 @@
 @media (max-width: 768px) {
   .add-card-button,
   .add-bank-button {
-    min-height: 120px;
+    height: 300px !important; /* ALTURA PROPORCIONAL NO MOBILE */
   }
   
   .add-card-content,
@@ -4243,8 +4736,8 @@
 .add-bank-button:hover {
   border-color: #6366f1 !important;
   background: linear-gradient(135deg, #f0f0ff 0%, #e6e6ff 100%) !important;
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.15);
+  transform: translateY(-4px); /* MESMO EFEITO DOS CARTÕES REAIS */
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.15); /* SOMBRA SIMILAR AOS CARTÕES */
 }
 
 .add-card-content,
@@ -4292,40 +4785,45 @@
 .banks-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.5rem;
+  gap: 2.5rem;
   justify-content: flex-start;
 }
 
 .credit-card-simple,
 .bank-card {
-  flex: 0 0 calc(33.333% - 1rem);
-  min-width: 280px;
+  flex: 0 0 calc(33.333% - 1.67rem);
+  min-width: 480px;
 }
 
 /* Força o botão de adicionar sempre à direita */
 .add-card-button,
 .add-bank-button {
-  flex: 0 0 calc(33.333% - 1rem);
-  min-width: 280px;
+  flex: 0 0 calc(33.333% - 1.67rem);
+  min-width: 480px;
   margin-left: auto;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1600px) {
   .credit-card-simple,
   .bank-card,
   .add-card-button,
   .add-bank-button {
-    flex: 0 0 calc(50% - 0.75rem);
-    min-width: 250px;
+    flex: 0 0 calc(50% - 1.25rem);
+    min-width: 420px;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1100px) {
   .credit-card-simple,
   .bank-card,
   .add-card-button,
   .add-bank-button {
     flex: 0 0 100%;
     min-width: unset;
+  }
+  
+  .cards-grid,
+  .banks-grid {
+    gap: 2rem;
   }
 }

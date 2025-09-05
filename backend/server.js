@@ -60,6 +60,9 @@ const BankSchema = new mongoose.Schema({
 // Credit Card Schema
 const CreditCardSchema = new mongoose.Schema({
   name: String,
+  cardName: String, // Nome personalizado do cartão
+  holderName: String, // Nome do portador do cartão
+  flag: String, // Bandeira do cartão (Visa, Mastercard, etc)
   bank: String,
   lastDigits: String,
   limit: Number,
@@ -94,39 +97,30 @@ const generateRecurringTransactions = async (userId, month, year) => {
   
   // Se já está gerando para este usuário/mês, pular
   if (generatingTransactions.has(key)) {
-    console.log(`⏭️  Já gerando transações para ${key}, pulando...`);
     return;
   }
   
   generatingTransactions.set(key, true);
   
   try {
-    console.log(`🔄 Gerando transações fixas para ${month}/${year} - Usuário: ${userId}`);
-    
     // Buscar todas as transações fixas do usuário
     const recurringTransactions = await Transaction.find({
       userId,
       isRecurring: true
     });
 
-    console.log(`📋 Templates encontrados: ${recurringTransactions.length}`);
-
-    const currentDate = new Date();
-    const requestedDate = new Date(year, month - 1, 1);
-    
-    // REMOVER LIMITAÇÃO - Permitir gerar transações fixas para qualquer mês
-    console.log(`📅 Gerando transações para: ${month}/${year}`);
+    if (recurringTransactions.length === 0) {
+      return; // Não há templates, sair silenciosamente
+    }
 
     const startOfMonth = new Date(year, month - 1, 1);
     const endOfMonth = new Date(year, month, 0);
+    let transactionsCreated = 0;
 
     for (const recurringTx of recurringTransactions) {
-      console.log(`🔍 Processando template: ${recurringTx.description} - ID: ${recurringTx._id}`);
-      
       // Verificar se a transação fixa foi criada antes ou no mês solicitado
       const recurringTxDate = new Date(recurringTx.date);
       if (recurringTxDate > endOfMonth) {
-        console.log(`⏭️  Template criado após mês solicitado, pulando`);
         continue; // Pula se a transação fixa foi criada depois do mês solicitado
       }
 
@@ -141,41 +135,86 @@ const generateRecurringTransactions = async (userId, month, year) => {
         isRecurring: false
       });
 
-      if (existingTransaction) {
-        console.log(`✅ Transação já existe para este mês: ${existingTransaction._id}`);
-      } else {
+      if (!existingTransaction) {
         // Determinar o dia da transação no mês
         const targetDay = Math.min(recurringTx.recurringDay || recurringTx.date.getDate(), endOfMonth.getDate());
-        const transactionDate = new Date(year, month - 1, targetDay, 12, 0, 0); // Definir meio-dia para evitar problemas de fuso
+        const transactionDate = new Date(year, month - 1, targetDay, 12, 0, 0);
 
-        console.log(`➕ Criando nova transação: ${recurringTx.description} para ${transactionDate.toLocaleDateString()}`);
-        console.log(`🔍 Template banco: ${recurringTx.bank}, cartão: ${recurringTx.creditCard}, método: ${recurringTx.paymentMethod}`);
+        // Criar banco automaticamente se necessário (transações recorrentes geradas)
+        if (recurringTx.bank && (recurringTx.paymentMethod === 'debito' || recurringTx.paymentMethod === 'pix')) {
+          try {
+            const existingBank = await Bank.findOne({ 
+              name: recurringTx.bank,
+              userId 
+            });
+            
+            if (!existingBank) {
+              const newBank = new Bank({
+                name: recurringTx.bank,
+                accountType: recurringTx.paymentMethod === 'pix' ? 'Conta Corrente' : 'Conta Corrente',
+                agency: '0000',
+                accountNumber: '00000-0',
+                notes: 'Criado automaticamente via transação recorrente.',
+                userId
+              });
+              await newBank.save();
+              console.log('🏦 Banco criado automaticamente para transação recorrente:', recurringTx.bank);
+            }
+          } catch (error) {
+            console.error('🏦 Erro ao criar banco para transação recorrente:', error);
+          }
+        }
 
-        // Criar a nova transação para este mês - COPIAR TODOS OS CAMPOS
+        // Criar cartão automaticamente se necessário (transações recorrentes geradas)
+        if (recurringTx.creditCard && recurringTx.paymentMethod === 'credito') {
+          try {
+            const existingCard = await CreditCard.findOne({ 
+              name: recurringTx.creditCard,
+              userId 
+            });
+            
+            if (!existingCard) {
+              const newCard = new CreditCard({
+                name: recurringTx.creditCard,
+                lastDigits: '0000',
+                limit: 1000,
+                dueDay: 10,
+                notes: 'Criado automaticamente via transação recorrente.',
+                userId
+              });
+              await newCard.save();
+              console.log('💳 Cartão criado automaticamente para transação recorrente:', recurringTx.creditCard);
+            }
+          } catch (error) {
+            console.error('💳 Erro ao criar cartão para transação recorrente:', error);
+          }
+        }
+
+        // Criar a nova transação para este mês
         const newTransaction = new Transaction({
           description: recurringTx.description,
           amount: recurringTx.amount,
           type: recurringTx.type,
           category: recurringTx.category,
           paymentMethod: recurringTx.paymentMethod,
-          bank: recurringTx.bank, // IMPORTANTE: Copiar o banco
-          creditCard: recurringTx.creditCard, // IMPORTANTE: Copiar o cartão
+          bank: recurringTx.bank,
+          creditCard: recurringTx.creditCard,
           notes: recurringTx.notes,
           userId,
           date: transactionDate,
-          isRecurring: false, // Esta é a transação gerada, não o template
-          isFixed: true, // Marcar como transação fixa
+          isRecurring: false,
+          isFixed: true,
           recurringParentId: recurringTx._id
         });
 
-        console.log(`✅ Nova transação criada com banco: ${newTransaction.bank}`);
-
         await newTransaction.save();
-        console.log(`✅ Transação criada: ${newTransaction._id}`);
+        transactionsCreated++;
       }
     }
     
-    console.log(`🏁 Finalizado processamento para ${month}/${year}`);
+    if (transactionsCreated > 0) {
+      console.log(`✅ ${transactionsCreated} transações recorrentes criadas para ${month}/${year}`);
+    }
   } catch (error) {
     console.error('Erro ao gerar transações fixas:', error);
   } finally {
@@ -298,13 +337,28 @@ app.get('/api/transactions', auth, async (req, res) => {
     
     // Se mês e ano forem fornecidos, filtrar por período
     if (month && year) {
-      // Gerar transações fixas para o mês solicitado
-      await generateRecurringTransactions(req.user._id, parseInt(month), parseInt(year));
-      
       const startDate = new Date(year, month - 1, 1); // Primeiro dia do mês
       const endDate = new Date(year, month, 0, 23, 59, 59, 999); // Último dia do mês
       query.date = { $gte: startDate, $lte: endDate };
       query.isRecurring = { $ne: true }; // Excluir os templates de transações fixas da lista
+      
+      // Só gerar transações recorrentes se ainda não existirem para o mês
+      const existingRecurringCount = await Transaction.countDocuments({
+        userId: req.user._id,
+        date: { $gte: startDate, $lte: endDate },
+        recurringParentId: { $exists: true }
+      });
+      
+      const recurringTemplatesCount = await Transaction.countDocuments({
+        userId: req.user._id,
+        isRecurring: true
+      });
+      
+      // Se não há transações recorrentes para o mês, mas há templates, gerar
+      if (existingRecurringCount === 0 && recurringTemplatesCount > 0) {
+        console.log(`🔄 Gerando transações recorrentes para ${month}/${year} - Templates: ${recurringTemplatesCount}`);
+        await generateRecurringTransactions(req.user._id, parseInt(month), parseInt(year));
+      }
     } else {
       query.isRecurring = { $ne: true }; // Sempre excluir templates
     }
@@ -424,6 +478,64 @@ app.post('/api/transactions', auth, async (req, res) => {
       
       console.log(`💾 Criando template fixa com banco: ${transactionData.bank}, método: ${transactionData.paymentMethod}`);
       
+      // Criar banco automaticamente se necessário (transações fixas débito/PIX)
+      if (transactionData.bank && (transactionData.paymentMethod === 'debito' || transactionData.paymentMethod === 'pix')) {
+        console.log('🏦 Backend Fixa - Verificando se banco existe:', transactionData.bank);
+        try {
+          const existingBank = await Bank.findOne({ 
+            name: transactionData.bank,
+            userId: req.user._id 
+          });
+          
+          if (!existingBank) {
+            console.log('🏦 Backend Fixa - Criando banco automaticamente:', transactionData.bank);
+            const newBank = new Bank({
+              name: transactionData.bank,
+              accountType: transactionData.paymentMethod === 'pix' ? 'Conta Corrente' : 'Conta Corrente',
+              agency: '0000',
+              accountNumber: '00000-0',
+              notes: 'Criado automaticamente via transação fixa.',
+              userId: req.user._id
+            });
+            await newBank.save();
+            console.log('🏦 Backend Fixa - Banco criado com sucesso:', transactionData.bank);
+          } else {
+            console.log('🏦 Backend Fixa - Banco já existe:', transactionData.bank);
+          }
+        } catch (error) {
+          console.error('🏦 Backend Fixa - Erro ao criar banco:', error);
+        }
+      }
+      
+      // Criar cartão automaticamente se necessário (transações fixas crédito)
+      if (transactionData.creditCard && transactionData.paymentMethod === 'credito') {
+        console.log('💳 Backend Fixa - Verificando se cartão existe:', transactionData.creditCard);
+        try {
+          const existingCard = await CreditCard.findOne({ 
+            name: transactionData.creditCard,
+            userId: req.user._id 
+          });
+          
+          if (!existingCard) {
+            console.log('💳 Backend Fixa - Criando cartão automaticamente:', transactionData.creditCard);
+            const newCard = new CreditCard({
+              name: transactionData.creditCard,
+              lastDigits: '0000',
+              limit: 1000,
+              dueDay: 10,
+              notes: 'Criado automaticamente via transação fixa.',
+              userId: req.user._id
+            });
+            await newCard.save();
+            console.log('💳 Backend Fixa - Cartão criado com sucesso:', transactionData.creditCard);
+          } else {
+            console.log('💳 Backend Fixa - Cartão já existe:', transactionData.creditCard);
+          }
+        } catch (error) {
+          console.error('💳 Backend Fixa - Erro ao criar cartão:', error);
+        }
+      }
+      
       // Criar o template da transação fixa - GARANTIR TODOS OS CAMPOS
       const recurringTemplate = new Transaction({
         description: transactionData.description,
@@ -464,6 +576,35 @@ app.post('/api/transactions', auth, async (req, res) => {
     } else if (transactionData.isInstallment) {
       // Transação parcelada
       console.log('💳 Criando transação parcelada');
+      
+      // Criar banco automaticamente se necessário (transações parceladas débito/PIX)
+      if (transactionData.bank && (transactionData.paymentMethod === 'debito' || transactionData.paymentMethod === 'pix')) {
+        console.log('🏦 Backend Parcelada - Verificando se banco existe:', transactionData.bank);
+        try {
+          const existingBank = await Bank.findOne({ 
+            name: transactionData.bank,
+            userId: req.user._id 
+          });
+          
+          if (!existingBank) {
+            console.log('🏦 Backend Parcelada - Criando banco automaticamente:', transactionData.bank);
+            const newBank = new Bank({
+              name: transactionData.bank,
+              accountType: transactionData.paymentMethod === 'pix' ? 'Conta Corrente' : 'Conta Corrente',
+              agency: '0000',
+              accountNumber: '00000-0',
+              notes: 'Criado automaticamente via transação parcelada.',
+              userId: req.user._id
+            });
+            await newBank.save();
+            console.log('🏦 Backend Parcelada - Banco criado com sucesso:', transactionData.bank);
+          } else {
+            console.log('🏦 Backend Parcelada - Banco já existe:', transactionData.bank);
+          }
+        } catch (error) {
+          console.error('🏦 Backend Parcelada - Erro ao criar banco:', error);
+        }
+      }
       
       // Criar cartão automaticamente se necessário (antes de criar as parcelas)
       if (transactionData.creditCard && transactionData.paymentMethod === 'credito') {
@@ -565,6 +706,35 @@ app.post('/api/transactions', auth, async (req, res) => {
           }
         } catch (error) {
           console.error('💳 Backend Normal - Erro ao criar cartão:', error);
+        }
+      }
+      
+      // Criar banco automaticamente se necessário (débito/PIX)
+      if (transactionData.bank && (transactionData.paymentMethod === 'debito' || transactionData.paymentMethod === 'pix')) {
+        console.log('🏦 Backend - Verificando se banco existe:', transactionData.bank);
+        try {
+          const existingBank = await Bank.findOne({ 
+            name: transactionData.bank,
+            userId: req.user._id 
+          });
+          
+          if (!existingBank) {
+            console.log('🏦 Backend - Criando banco automaticamente:', transactionData.bank);
+            const newBank = new Bank({
+              name: transactionData.bank,
+              accountType: transactionData.paymentMethod === 'pix' ? 'Conta Corrente' : 'Conta Corrente',
+              agency: '0000',
+              accountNumber: '00000-0',
+              notes: 'Criado automaticamente via transação.',
+              userId: req.user._id
+            });
+            await newBank.save();
+            console.log('🏦 Backend - Banco criado com sucesso:', transactionData.bank);
+          } else {
+            console.log('🏦 Backend - Banco já existe:', transactionData.bank);
+          }
+        } catch (error) {
+          console.error('🏦 Backend - Erro ao criar banco:', error);
         }
       }
       
@@ -1015,6 +1185,9 @@ app.post('/api/seed-data', auth, async (req, res) => {
     const sampleCards = [
       {
         name: 'Nubank Mastercard',
+        cardName: 'NUBANK GOLD',
+        holderName: 'JOAO SILVA',
+        flag: 'MASTERCARD',
         bank: 'Nubank',
         limit: 5000,
         lastDigits: '1234',
@@ -1023,6 +1196,9 @@ app.post('/api/seed-data', auth, async (req, res) => {
       },
       {
         name: 'Itaú Visa',
+        cardName: 'ITAU PLATINUM',
+        holderName: 'JOAO SILVA',
+        flag: 'VISA',
         bank: 'Itaú',
         limit: 3000,
         lastDigits: '5678',
@@ -1031,6 +1207,9 @@ app.post('/api/seed-data', auth, async (req, res) => {
       },
       {
         name: 'C6 Mastercard',
+        cardName: 'C6 BLACK',
+        holderName: 'JOAO SILVA',
+        flag: 'MASTERCARD',
         bank: 'C6 Bank',
         limit: 2000,
         lastDigits: '9876',
