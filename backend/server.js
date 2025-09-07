@@ -50,6 +50,7 @@ const Transaction = mongoose.model('Transaction', TransactionSchema);
 const BankSchema = new mongoose.Schema({
   name: String,
   icon: String,
+  holderName: String,
   accountType: String,
   accountNumber: String,
   agency: String,
@@ -220,6 +221,71 @@ const generateRecurringTransactions = async (userId, month, year) => {
   } finally {
     // Limpar a flag para permitir futuras gerações se necessário
     generatingTransactions.delete(key);
+  }
+};
+
+// Função para gerar transações recorrentes em lote para os próximos anos
+const generateBulkRecurringTransactions = async (userId, recurringTemplate) => {
+  console.log(`🚀 Gerando transações recorrentes em lote para ${recurringTemplate.description}`);
+  
+  try {
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+    
+    // Gerar para os próximos 5 anos (60 meses)
+    const endYear = currentYear + 5;
+    let transactionsCreated = 0;
+    
+    for (let year = currentYear; year <= endYear; year++) {
+      const startMonth = (year === currentYear) ? currentMonth + 1 : 1; // Próximo mês se for ano atual
+      const endMonth = (year === endYear) ? 12 : 12; // Até dezembro
+      
+      for (let month = startMonth; month <= endMonth; month++) {
+        // Verificar se já existe transação para este mês
+        const startOfMonth = new Date(year, month - 1, 1);
+        const endOfMonth = new Date(year, month, 0);
+        
+        const existingTransaction = await Transaction.findOne({
+          userId,
+          recurringParentId: recurringTemplate._id,
+          date: {
+            $gte: startOfMonth,
+            $lte: endOfMonth
+          }
+        });
+        
+        if (!existingTransaction) {
+          // Determinar o dia da transação no mês
+          const targetDay = Math.min(recurringTemplate.recurringDay || recurringTemplate.date.getDate(), endOfMonth.getDate());
+          const transactionDate = new Date(year, month - 1, targetDay, 12, 0, 0);
+          
+          // Criar a nova transação
+          const newTransaction = new Transaction({
+            description: recurringTemplate.description,
+            amount: recurringTemplate.amount,
+            type: recurringTemplate.type,
+            category: recurringTemplate.category,
+            paymentMethod: recurringTemplate.paymentMethod,
+            bank: recurringTemplate.bank,
+            creditCard: recurringTemplate.creditCard,
+            notes: recurringTemplate.notes,
+            userId,
+            date: transactionDate,
+            isRecurring: false,
+            isFixed: true,
+            recurringParentId: recurringTemplate._id
+          });
+          
+          await newTransaction.save();
+          transactionsCreated++;
+        }
+      }
+    }
+    
+    console.log(`✅ ${transactionsCreated} transações recorrentes criadas em lote para ${recurringTemplate.description}`);
+  } catch (error) {
+    console.error('❌ Erro ao gerar transações recorrentes em lote:', error);
   }
 };
 
@@ -554,6 +620,9 @@ app.post('/api/transactions', auth, async (req, res) => {
       await recurringTemplate.save();
       
       console.log(`✅ Template salvo com banco: ${recurringTemplate.bank}`);
+      
+      // Gerar automaticamente transações para os próximos anos
+      await generateBulkRecurringTransactions(req.user._id, recurringTemplate);
       
       // Criar também a transação para o mês atual
       const currentTransaction = new Transaction({

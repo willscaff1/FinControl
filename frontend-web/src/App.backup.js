@@ -20,6 +20,319 @@ axios.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Função utilitária para replicar transações fixas (TODOS os tipos de pagamento)
+const replicateFixedTransactions = (currentMonthTransactions, allTransactions, targetMonth, targetYear) => {
+  console.log(`🔍 INÍCIO - Replicando transações fixas para ${targetMonth}/${targetYear}`);
+  console.log(`📊 Transações recebidas: ${allTransactions.length} total, ${currentMonthTransactions.length} do mês atual`);
+  
+  if (!Array.isArray(allTransactions)) {
+    console.log('⚠️ allTransactions não é um array válido');
+    return [];
+  }
+  
+  const targetMonthDate = new Date(targetYear, targetMonth - 1, 1);
+  
+  // Filtrar transações que são FIXAS (todos os métodos de pagamento) de meses anteriores
+  const fixedTransactions = allTransactions.filter(transaction => {
+    if (!transaction || !transaction._id) return false;
+    
+    const transactionDate = new Date(transaction.date);
+    const isBeforeTargetMonth = transactionDate < targetMonthDate;
+    
+    // 1. Verificação explícita do campo isFixed ou isRecurring
+    let isFixed = transaction.isFixed === true || 
+                  transaction.isFixed === 1 || 
+                  transaction.isRecurring === true || 
+                  transaction.isRecurring === 1;
+    
+    // 2. Verificação por palavras-chave (MAS EXCLUIR PARCELAMENTOS)
+    if (!isFixed && transaction.description) {
+      const desc = transaction.description.toLowerCase();
+      
+      // ❌ NÃO é fixa se for parcelamento (tem padrão X/Y)
+      if (desc.match(/\(\d+\/\d+\)/)) {
+        console.log(`❌ PARCELAMENTO IGNORADO: "${transaction.description}" não é transação fixa`);
+        return false; // Explicitamente não é fixa
+      }
+      
+      // ✅ Palavras-chave que indicam transações fixas/recorrentes
+      const fixedKeywords = [
+        'fixa', 'fixo', 'recorrente', 'mensal',
+        'netflix', 'spotify', 'amazon prime', 'disney', 'hbo', 'paramount',
+        'vivo', 'claro', 'tim', 'oi', 'internet', 'telefone',
+        'academia', 'gym', 'fitness', 'bluefit', 'smartfit',
+        'icloud', 'google one', 'dropbox', 'onedrive',
+        'energia', 'luz', 'água', 'gas', 'condominio',
+        'seguro', 'plano de saude', 'convenio',
+        'escola', 'faculdade', 'curso',
+        'assinatura', 'subscription', 'mensalidade'
+      ];
+      
+      isFixed = fixedKeywords.some(keyword => desc.includes(keyword));
+      
+      if (isFixed) {
+        console.log(`🎯 DETECTADO POR PALAVRA-CHAVE: "${transaction.description}" marcado como fixo`);
+      }
+    }
+    
+    return isFixed && isBeforeTargetMonth;
+  });
+  
+  console.log(`🎯 Encontradas ${fixedTransactions.length} transações fixas para replicar em ${targetMonth}/${targetYear}`);
+  
+  // Criar transações virtuais para o mês atual
+  const virtualFixedTransactions = fixedTransactions.map(originalTransaction => {
+    const originalDate = new Date(originalTransaction.date);
+    let newDate = new Date(targetYear, targetMonth - 1, originalDate.getDate());
+    
+    // Se o dia não existe no mês, usar o último dia do mês
+    if (newDate.getMonth() !== targetMonth - 1) {
+      newDate = new Date(targetYear, targetMonth, 0);
+    }
+    
+    return {
+      ...originalTransaction,
+      _id: `virtual-fixed-${originalTransaction._id}-${targetMonth}-${targetYear}`,
+      date: newDate.toISOString(),
+      isVirtualFixed: true,
+      originalTransactionId: originalTransaction._id
+    };
+  });
+  
+  console.log(`🔨 Criadas ${virtualFixedTransactions.length} transações virtuais (antes da filtragem de duplicatas)`);
+  
+  // Verificar se já existe no mês atual (evitar duplicatas)
+  const finalVirtualTransactions = virtualFixedTransactions.filter(virtualTx => {
+    const duplicateExists = currentMonthTransactions.some(existing => {
+      const sameDescription = existing.description === virtualTx.description;
+      const sameAmount = Math.abs(existing.amount - virtualTx.amount) < 0.01;
+      const samePaymentMethod = existing.paymentMethod === virtualTx.paymentMethod;
+      
+      // Para crédito, verificar também o cartão
+      const sameCreditCard = virtualTx.paymentMethod === 'credito' ? 
+        (existing.creditCard === virtualTx.creditCard) : true;
+      
+      const dateDifference = Math.abs(new Date(existing.date).getDate() - new Date(virtualTx.date).getDate());
+      const similarDate = dateDifference <= 2;
+      
+      return sameDescription && sameAmount && samePaymentMethod && sameCreditCard && similarDate;
+    });
+    
+    return !duplicateExists;
+  });
+  
+  console.log(`✅ FINAL - Criadas ${finalVirtualTransactions.length} transações virtuais fixas (após remoção de duplicatas)`);
+  
+  return finalVirtualTransactions;
+};
+
+// Função para detectar se uma transação é fixa baseada em palavras-chave
+  console.log(`📊 Transações recebidas: ${allTransactions?.length || 0} total, ${currentMonthTransactions?.length || 0} do mês atual`);
+  
+  // Validação básica
+  if (!allTransactions || !Array.isArray(allTransactions)) {
+    console.warn('⚠️ allTransactions não é um array válido');
+    return [];
+  }
+  
+  if (!currentMonthTransactions || !Array.isArray(currentMonthTransactions)) {
+    console.warn('⚠️ currentMonthTransactions não é um array válido');
+    return [];
+  }
+  
+  // Debug: Mostrar algumas transações para verificar estrutura
+  console.log('🔍 Primeiras 3 transações:', allTransactions.slice(0, 3).map(t => ({
+    id: t._id,
+    description: t.description,
+    isFixed: t.isFixed,
+    fixed: t.fixed,
+    paymentMethod: t.paymentMethod,
+    date: t.date
+  })));
+  
+  // Debug: Verificar todas as transações de crédito
+  const creditTransactions = allTransactions.filter(t => t.paymentMethod === 'credito');
+  console.log(`🔍 Total de transações de crédito encontradas: ${creditTransactions.length}`);
+  
+  if (creditTransactions.length > 0) {
+    console.log('💳 Transações de crédito:', creditTransactions.slice(0, 5).map(t => ({
+      id: t._id,
+      description: t.description,
+      isFixed: t.isFixed,
+      fixed: t.fixed,
+      amount: t.amount,
+      date: t.date,
+      creditCard: t.creditCard
+    })));
+  }
+  
+  // Encontrar transações fixas de crédito criadas antes do mês atual
+  const targetMonthDate = new Date(targetYear, targetMonth - 1, 1);
+  console.log(`📅 Data alvo do mês: ${targetMonthDate.toISOString()}`);
+  
+  const fixedCreditTransactions = allTransactions.filter(transaction => {
+    if (!transaction) return false;
+    
+    const transactionDate = new Date(transaction.date);
+    
+    // CORREÇÃO ROBUSTA: Verificar isFixed de múltiplas formas
+    let isFixed = false;
+    
+    // 1. Verificação direta do campo isFixed/isRecurring
+    if (transaction.isFixed === true || 
+        transaction.isFixed === 'true' || 
+        transaction.isFixed === 1 ||
+        transaction.fixed === true ||
+        transaction.fixed === 'true' ||
+        transaction.isRecurring === true ||
+        transaction.isRecurring === 'true' ||
+        transaction.isRecurring === 1) {
+      isFixed = true;
+    }
+    
+    // 2. Verificação por padrões na descrição (fallback) - CORRIGIDA
+    if (!isFixed && transaction.description) {
+      const desc = transaction.description.toLowerCase();
+      
+      // ❌ NÃO é fixa se for parcelamento (tem padrão X/Y)
+      if (desc.match(/\(\d+\/\d+\)/)) {
+        isFixed = false; // Explicitamente NÃO é fixa
+        console.log(`❌ PARCELAMENTO IGNORADO: "${transaction.description}" não é transação fixa`);
+      } else {
+        // ✅ Palavras-chave que indicam transações fixas/recorrentes (apenas se não for parcelamento)
+        const fixedKeywords = [
+          'fixa', 'fixo', 'recorrente', 'mensal',
+          // Serviços comuns que são sempre fixos
+          'netflix', 'spotify', 'amazon prime', 'disney', 'hbo', 'paramount',
+          'vivo', 'claro', 'tim', 'oi', 'internet', 'telefone',
+          'academia', 'gym', 'fitness', 'bluefit', 'smartfit',
+          'icloud', 'google one', 'dropbox', 'onedrive',
+          'energia', 'luz', 'água', 'gas', 'condominio',
+          'seguro', 'plano de saude', 'convenio',
+          'escola', 'faculdade', 'curso',
+          'assinatura', 'subscription', 'mensalidade'
+        ];
+        
+        isFixed = fixedKeywords.some(keyword => desc.includes(keyword));
+        
+        if (isFixed) {
+          console.log(`🎯 DETECTADO POR PALAVRA-CHAVE: "${transaction.description}" marcado como fixo`);
+        }
+      }
+    }
+    
+    // 3. Se a transação se repete em vários meses com mesmo valor e descrição (detectar padrão)
+    if (!isFixed) {
+      const sameTransactions = allTransactions.filter(t => 
+        t.description === transaction.description &&
+        Math.abs(t.amount - transaction.amount) < 0.01 &&
+        t.paymentMethod === 'credito' &&
+        t.creditCard === transaction.creditCard
+      );
+      
+      // Se a mesma transação aparece em 3+ meses diferentes, provavelmente é fixa
+      if (sameTransactions.length >= 3) {
+        const uniqueMonths = new Set(sameTransactions.map(t => {
+          const d = new Date(t.date);
+          return `${d.getFullYear()}-${d.getMonth()}`;
+        }));
+        
+        if (uniqueMonths.size >= 3) {
+          isFixed = true;
+          console.log(`🎯 PADRÃO DETECTADO: ${transaction.description} aparece em ${uniqueMonths.size} meses - marcando como fixa`);
+        }
+      }
+    }
+    
+    const isCredit = transaction.paymentMethod === 'credito';
+    const isBeforeTargetMonth = transactionDate < targetMonthDate;
+    
+    // Debug detalhado para transações de crédito
+    if (isCredit && allTransactions.filter(t => t.paymentMethod === 'credito').indexOf(transaction) < 3) {
+      console.log(`🔍 Transação de crédito ${transaction._id}:`, {
+        description: transaction.description,
+        isFixed: transaction.isFixed,
+        fixed: transaction.fixed,
+        detectedAsFixed: isFixed,
+        paymentMethod: transaction.paymentMethod,
+        creditCard: transaction.creditCard,
+        amount: transaction.amount,
+        date: transaction.date,
+        conditions: { isFixed, isCredit, isBeforeTargetMonth }
+      });
+    }
+    
+    return isFixed && isCredit && isBeforeTargetMonth;
+  });
+  
+  console.log(`🎯 Encontradas ${fixedCreditTransactions.length} transações fixas de crédito para replicar em ${targetMonth}/${targetYear}`);
+  
+  if (fixedCreditTransactions.length > 0) {
+    console.log('📋 Transações fixas encontradas:', fixedCreditTransactions.map(t => ({
+      id: t._id,
+      description: t.description,
+      amount: t.amount,
+      date: t.date,
+      creditCard: t.creditCard
+    })));
+  }
+  
+  // Criar transações virtuais para o mês atual
+  const virtualFixedTransactions = fixedCreditTransactions.map(originalTransaction => {
+    const originalDate = new Date(originalTransaction.date);
+    let newDate = new Date(targetYear, targetMonth - 1, originalDate.getDate());
+    
+    // Se o dia não existir no mês atual (ex: 31 em fevereiro), usar último dia do mês
+    if (newDate.getMonth() !== targetMonth - 1) {
+      newDate = new Date(targetYear, targetMonth, 0); // Último dia do mês
+    }
+    
+    const virtualTransaction = {
+      ...originalTransaction,
+      _id: `virtual_fixed_${originalTransaction._id}_${targetMonth}_${targetYear}`,
+      date: newDate.toISOString(),
+      isVirtualFixed: true,
+      originalTransactionId: originalTransaction._id
+    };
+    
+    console.log(`🆕 Criando virtual: ${originalTransaction.description} - ${originalTransaction.amount} - ${newDate.toLocaleDateString('pt-BR')}`);
+    
+    return virtualTransaction;
+  });
+  
+  console.log(`🔨 Criadas ${virtualFixedTransactions.length} transações virtuais (antes da filtragem de duplicatas)`);
+  
+  // Verificar se já existe no mês atual (evitar duplicatas)
+  const finalVirtualTransactions = virtualFixedTransactions.filter(virtualTx => {
+    const duplicateExists = currentMonthTransactions.some(existing => {
+      const sameDescription = existing.description === virtualTx.description;
+      const sameAmount = Math.abs(existing.amount - virtualTx.amount) < 0.01;
+      const samePaymentMethod = existing.paymentMethod === virtualTx.paymentMethod;
+      
+      // Para crédito, verificar também o cartão
+      const sameCreditCard = virtualTx.paymentMethod === 'credito' ? 
+        (existing.creditCard === virtualTx.creditCard) : true;
+      
+      const dateDifference = Math.abs(new Date(existing.date).getDate() - new Date(virtualTx.date).getDate());
+      const similarDate = dateDifference <= 2;
+      
+      const isDuplicate = sameDescription && sameAmount && samePaymentMethod && sameCreditCard && similarDate;
+      
+      if (isDuplicate) {
+        console.log(`🚫 Duplicata encontrada: ${virtualTx.description} já existe no mês atual`);
+      }
+      
+      return isDuplicate;
+    });
+    
+    return !duplicateExists;
+  });
+  
+  console.log(`✅ FINAL - Criadas ${finalVirtualTransactions.length} transações virtuais fixas (após remoção de duplicatas)`);
+  
+  return finalVirtualTransactions;
+};
+
 // Interceptador de resposta para lidar com tokens expirados
 axios.interceptors.response.use(
   (response) => response,
@@ -134,6 +447,57 @@ const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
+};
+
+// Função para detectar se uma transação é fixa baseada em palavras-chave
+const detectFixedByKeywords = (description) => {
+  if (!description) return false;
+  const desc = description.toLowerCase();
+  
+  // ❌ NÃO é fixa se for parcelamento (tem padrão de parcela)
+  if (desc.match(/\(\d+\/\d+\)/)) {
+    return false; // Ex: "Empréstimo (1/32)" não é fixa, é parcelado
+  }
+  
+  // ✅ É fixa se contém palavras-chave de serviços recorrentes
+  return desc.includes('academia') || desc.includes('vivo') || desc.includes('icloud') ||
+         desc.includes('netflix') || desc.includes('spotify') || desc.includes('disney') ||
+         desc.includes('fixa') || desc.includes('fixo') || desc.includes('recorrente') || 
+         desc.includes('mensal') || desc.includes('assinatura');
+};
+
+// Função para atualizar transações existentes com a flag isFixed
+const updateExistingFixedTransactions = async () => {
+  try {
+    console.log('🔄 Atualizando transações existentes com flag isFixed...');
+    
+    // Buscar todas as transações
+    const response = await axios.get('http://localhost:3001/transactions');
+    const allTransactions = response.data;
+    
+    let updatedCount = 0;
+    
+    for (const transaction of allTransactions) {
+      // Verificar se a transação deveria ser marcada como fixa
+      const shouldBeFixed = detectFixedByKeywords(transaction.description);
+      
+      if (shouldBeFixed && !transaction.isFixed) {
+        // Atualizar a transação
+        await axios.put(`http://localhost:3001/transactions/${transaction._id}`, {
+          ...transaction,
+          isFixed: true
+        });
+        updatedCount++;
+        console.log(`✅ Atualizada: ${transaction.description}`);
+      }
+    }
+    
+    console.log(`🎉 ${updatedCount} transações foram atualizadas com a flag isFixed`);
+    return updatedCount;
+  } catch (error) {
+    console.error('❌ Erro ao atualizar transações:', error);
+    return 0;
+  }
 };
 
 // Componente para rotas protegidas
@@ -448,32 +812,42 @@ const DashboardPage = () => {
   const abortControllerRef = useRef(null);
   const lastLoadParamsRef = useRef(null);
   const debounceTimerRef = useRef(null);
+  const transactionsLengthRef = useRef(0); // Ref para evitar recriação do loadData
 
   const loadData = useCallback(async (month = selectedMonth, year = selectedYear, forceReload = false) => {
-    // Evita múltiplas chamadas simultâneas
-    if (loadingRef.current && !forceReload) {
-      console.log('🔄 Carregamento já em andamento, ignorando...');
+    // Chave única para a requisição
+    const requestKey = `dashboard-${month}-${year}`;
+    const currentParams = `${month}-${year}`;
+    
+    // CORREÇÃO: Permitir carregamento inicial SEMPRE se não há dados
+    const isInitialLoad = transactionsLengthRef.current === 0 && !lastLoadParamsRef.current;
+    
+    // CORREÇÃO: Se já está carregando os MESMOS dados E não é carregamento inicial, aguardar
+    if (loadingRef.current === requestKey && !isInitialLoad && !forceReload) {
+      console.log('🔄 Já carregando dashboard para este período, ignorando...');
       return;
     }
     
-    // Verificar cache (só se não for reload forçado)
-    const currentParams = `${month}-${year}`;
-    if (!forceReload && lastLoadParamsRef.current === currentParams) {
+    // Cancelar apenas se for requisição DIFERENTE
+    if (abortControllerRef.current && loadingRef.current && loadingRef.current !== requestKey) {
+      console.log('⏹️ Cancelando requisição anterior (nova solicitação)');
+      abortControllerRef.current.abort();
+    }
+    
+    // CORREÇÃO: Cache apenas se NÃO for carregamento inicial
+    if (!forceReload && !isInitialLoad && lastLoadParamsRef.current === currentParams && loadingRef.current !== requestKey && transactionsLengthRef.current > 0) {
       console.log('📋 Dados já carregados para este período, usando cache');
       return;
     }
     
+    console.log(`🚀 Iniciando carregamento: ${requestKey}, forceReload=${forceReload}, isInitialLoad=${isInitialLoad}`);
+    
     // Marcar como carregando
-    loadingRef.current = true;
+    loadingRef.current = requestKey;
     setIsLoadingData(true);
     setLoadingError(null);
     
-    // Cancelar requisição anterior apenas se houver uma pendente há mais de 2 segundos
-    if (abortControllerRef.current) {
-      console.log('⏹️ Cancelando requisição anterior');
-      abortControllerRef.current.abort();
-    }
-    
+    // Novo controller para esta requisição
     abortControllerRef.current = new AbortController();
     
     // Timeout de segurança (15 segundos para dar tempo das requisições)
@@ -499,7 +873,7 @@ const DashboardPage = () => {
       });
       
       // Carregar dados complementares em paralelo (mas com o mesmo controller)
-      const [cardsResponse, banksResponse, transactionsResponse] = await Promise.all([
+      const [cardsResponse, banksResponse, transactionsResponse, allTransactionsResponse] = await Promise.all([
         axios.get('/credit-cards', { 
           signal: abortControllerRef.current.signal,
           timeout: 8000 
@@ -508,25 +882,35 @@ const DashboardPage = () => {
           signal: abortControllerRef.current.signal,
           timeout: 8000 
         }),
-        // Carregar TODAS as transações para permitir geração de virtuais em qualquer mês
-        axios.get('/transactions', { 
+        axios.get(`/transactions?month=${month}&year=${year}`, { 
           signal: abortControllerRef.current.signal,
           timeout: 10000 
-        })
+        }),
+        // Buscar todas as transações para encontrar fixas
+        axios.get('/transactions', {
+          signal: abortControllerRef.current.signal,
+          timeout: 12000
+        }).catch(() => ({ data: [] })) // Se falhar, continua sem fixas
       ]);
       
       setCreditCards(cardsResponse.data || []);
       setBanks(banksResponse.data || []);
-      setTransactions(transactionsResponse.data || []);
       
-      console.log('🔍 DEBUG DASHBOARD CARREGADO:', {
-        cartões: cardsResponse.data?.length || 0,
-        bancos: banksResponse.data?.length || 0,
-        transações: transactionsResponse.data?.length || 0,
-        mês: month,
-        ano: year,
-        transaçõesCompletas: transactionsResponse.data
-      });
+      // CORREÇÃO: Usar a função utilitária
+      const currentMonthTransactions = transactionsResponse.data || [];
+      const allTransactions = allTransactionsResponse.data || [];
+      
+      // Replicar transações fixas (todos os tipos de pagamento)
+      const virtualFixedTransactions = replicateFixedTransactions(
+        currentMonthTransactions, 
+        allTransactions, 
+        month, 
+        year
+      );
+      
+      const finalTransactions = [...currentMonthTransactions, ...virtualFixedTransactions];
+      setTransactions(finalTransactions);
+      transactionsLengthRef.current = finalTransactions.length;
       
       console.log('✅ Dashboard carregado com sucesso');
       
@@ -537,15 +921,13 @@ const DashboardPage = () => {
       } else {
         console.error('❌ Erro ao carregar dashboard:', error);
         setLoadingError(error.message || 'Erro desconhecido');
-        setData({
-          stats: { balance: 0, income: 0, expense: 0 },
-          recentTransactions: []
-        });
+        setTransactions([]);
+        transactionsLengthRef.current = 0;
       }
     } finally {
       clearTimeout(timeoutId);
       setIsLoadingData(false);
-      loadingRef.current = false;
+      loadingRef.current = null;
       
       // Só atualizar cache se não houve erro
       if (!loadingError) {
@@ -641,70 +1023,14 @@ const DashboardPage = () => {
     return months[month];
   };
 
-  // Função auxiliar para renderizar badges de transações
-  const renderTransactionBadges = (transaction) => {
-    const badges = [];
-    
-    // Badge de parcela
-    if (transaction.isInstallment) {
-      badges.push(
-        <span key="installment" className="installment-badge">
-          {transaction.installmentNumber}/{transaction.totalInstallments}
-        </span>
-      );
-    }
-    
-    // Badge de transação fixa/recorrente
-    if (transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) {
-      const isVirtual = transaction.isVirtual;
-      badges.push(
-        <span key="fixed" className={isVirtual ? "virtual-fixed-badge" : "fixed-badge"}>
-          {isVirtual ? "FIXA (AUTO)" : "FIXA"}
-        </span>
-      );
-    }
-    
-    return badges;
-  };
-
-  // Função para renderizar badges de transações do banco
-  const renderBankTransactionBadges = (transaction) => {
-    const badges = [];
-    
-    if (transaction.isInstallment) {
-      badges.push(
-        <span key="installment" className="installment-badge">
-          {transaction.installmentNumber}/{transaction.totalInstallments}
-        </span>
-      );
-    }
-    
-    if (transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) {
-      const isVirtual = transaction.isVirtualFixed || transaction.isVirtual;
-      badges.push(
-        <span key="fixed" className={isVirtual ? "virtual-fixed-badge" : "fixed-badge"}>
-          FIXA{isVirtual ? " (AUTO)" : ""}
-        </span>
-      );
-    }
-    
-    return badges;
-  };
-
   const getDashboardCardTransactionsByMonth = (cardName, month, year) => {
-    console.log('🔍 FILTRANDO TRANSAÇÕES CARTÃO:', { cardName, month, year, totalTransactions: transactions?.length || 0 });
+    if (!transactions || !Array.isArray(transactions)) return [];
     
-    if (!transactions || !Array.isArray(transactions)) {
-      console.log('❌ SEM TRANSAÇÕES DISPONÍVEIS');
-      return [];
-    }
-
-    // Primeiro, filtrar transações do mês específico
-    const monthTransactions = transactions.filter(transaction => {
+    return transactions.filter(transaction => {
       if (!transaction.date) return false;
       
       const transactionDate = new Date(transaction.date);
-      const transactionMonth = transactionDate.getMonth(); // Manter em formato 0-11
+      const transactionMonth = transactionDate.getMonth();
       const transactionYear = transactionDate.getFullYear();
       
       const isCorrectMonth = transactionMonth === month && transactionYear === year;
@@ -713,181 +1039,42 @@ const DashboardPage = () => {
       
       return isCorrectMonth && isCorrectCard && isCorrectType;
     });
-
-    // Buscar templates recorrentes para este cartão
-    const recurringTemplates = transactions.filter(transaction => {
-      return transaction.isRecurring && 
-             transaction.creditCard === cardName && 
-             transaction.paymentMethod === 'credito';
-    });
-
-    console.log('🔄 Templates recorrentes encontrados:', recurringTemplates.length);
-
-    // Para cada template, verificar se existe transação para o mês solicitado
-    recurringTemplates.forEach(template => {
-      const existingTransaction = monthTransactions.find(t => 
-        t.recurringParentId === template._id
-      );
-
-      if (!existingTransaction) {
-        console.log('🚀 Gerando transação recorrente virtual para:', template.description);
-        
-        // Determinar o dia da transação no mês
-        const templateDate = new Date(template.date);
-        const targetDay = Math.min(template.recurringDay || templateDate.getDate(), new Date(year, month + 1, 0).getDate());
-        const virtualDate = new Date(year, month, targetDay, 12, 0, 0);
-
-        // Criar transação virtual
-        const virtualTransaction = {
-          ...template,
-          _id: `virtual-${template._id}-${year}-${month + 1}`, // Converter para mês 1-12 para ID
-          date: virtualDate,
-          isRecurring: false,
-          isFixed: true,
-          recurringParentId: template._id,
-          isVirtual: true
-        };
-
-        monthTransactions.push(virtualTransaction);
-        console.log('✅ Transação virtual criada:', virtualTransaction.description, virtualDate.toISOString().split('T')[0]);
-      }
-    });
-    
-    console.log('✅ TRANSAÇÕES FINAIS:', monthTransactions.length, monthTransactions);
-    
-    // Buscar transações parceladas (installments) para este cartão
-    const installmentTransactions = transactions.filter(t => {
-      return t.isInstallment && 
-             t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             t.parentTransactionId; // Só pegar parcelamentos filhos
-    });
-
-    console.log('💳 Parcelamentos encontrados (Dashboard Cartão):', installmentTransactions.length);
-
-    // Para cada parcelamento, verificar se deve aparecer no mês solicitado
-    installmentTransactions.forEach(installment => {
-      const installmentDate = new Date(installment.date);
-      const installmentMonth = installmentDate.getMonth();
-      const installmentYear = installmentDate.getFullYear();
-      
-      // Verificar se esta parcela pertence ao mês solicitado
-      if (installmentMonth === month && installmentYear === year) {
-        // Verificar se já não foi adicionada
-        const existingInstallment = monthTransactions.find(t => t._id === installment._id);
-        if (!existingInstallment) {
-          monthTransactions.push(installment);
-          console.log('✅ Parcelamento adicionado (Dashboard Cartão):', installment.description, 
-                     `${installment.installmentNumber}/${installment.totalInstallments}`);
-        }
-      }
-    });
-    
-    return monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
   const calculateDashboardCardExpensesByMonth = (cardName, month, year) => {
-    console.log('📊 CALCULANDO GASTOS:', { cardName, month, year });
     const monthTransactions = getDashboardCardTransactionsByMonth(cardName, month, year);
-    console.log('📋 TRANSAÇÕES ENCONTRADAS:', monthTransactions.length, monthTransactions);
-    const total = monthTransactions.reduce((sum, transaction) => {
-      console.log('💳 TRANSAÇÃO:', { description: transaction.description, amount: transaction.amount });
+    return monthTransactions.reduce((sum, transaction) => {
       return sum + (transaction.amount || 0);
     }, 0);
-    console.log('💰 TOTAL CALCULADO:', total);
-    return total;
   };
 
   const calculateDashboardCardExpenses = (cardName) => {
-    // Usar a função que calcula apenas saldo atual (já lançado)
-    return calculateCurrentBalance(cardName);
+    if (!transactions || !Array.isArray(transactions)) return 0;
+    
+    return transactions
+      .filter(t => t.creditCard === cardName && t.paymentMethod === 'credito')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
   };
 
   const calculateDashboardCommittedBalance = (cardName) => {
     if (!transactions || !Array.isArray(transactions)) return 0;
     
     const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
+    today.setHours(0, 0, 0, 0);
     
-    // APENAS parcelamentos futuros do MÊS ATUAL (não transações fixas)
-    const futureInstallments = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      const transactionMonth = transactionDate.getMonth() + 1;
-      const transactionYear = transactionDate.getFullYear();
-      
-      return t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             t.isInstallment && // APENAS PARCELAMENTOS
-             transactionMonth === selectedMonth && // APENAS MÊS ATUAL
-             transactionYear === selectedYear &&
-             transactionDate > today; // Data futura dentro do mês
-    });
+    const futureInstallments = transactions.filter(t => 
+      t.creditCard === cardName && 
+      t.paymentMethod === 'credito' &&
+      t.isInstallment &&
+      new Date(t.date) > today
+    );
     
-    console.log(`💳 Saldo comprometido ${cardName} (${selectedMonth}/${selectedYear}):`, futureInstallments.length, 'parcelamentos futuros');
     return futureInstallments.reduce((sum, t) => sum + (t.amount || 0), 0);
-  };
-
-  // Calcular valor total "A ser lançado" no Dashboard
-  const calculateDashboardPendingAmount = (cardName) => {
-    if (!transactions || !Array.isArray(transactions)) return 0;
-    
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    
-    const pendingTransactions = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0);
-      const transactionMonth = transactionDate.getMonth() + 1;
-      const transactionYear = transactionDate.getFullYear();
-      
-      return t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             t.type === 'expense' &&
-             transactionMonth === selectedMonth &&
-             transactionYear === selectedYear &&
-             transactionDate > today; // Data futura
-    });
-    
-    return pendingTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-  };
-
-  // Calcular saldo atual (já lançado) do cartão no mês selecionado
-  const calculateCurrentBalance = (cardName) => {
-    if (!transactions || !Array.isArray(transactions)) return 0;
-    
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
-    
-    // Transações já lançadas do MÊS SELECIONADO
-    const currentTransactions = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      const transactionMonth = transactionDate.getMonth() + 1;
-      const transactionYear = transactionDate.getFullYear();
-      
-      return t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             transactionMonth === selectedMonth && // APENAS MÊS SELECIONADO
-             transactionYear === selectedYear &&
-             transactionDate <= today; // Data atual ou passada = já lançada
-    });
-    
-    console.log(`💳 Saldo atual ${cardName} (${selectedMonth}/${selectedYear}):`, currentTransactions.length, 'transações lançadas');
-    return currentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
   };
 
   // Funções para o modal de extrato de bancos (importadas da página de bancos)
   const getBankTransactionsByMonth = (bankName, month, year) => {
-    console.log('🔍 FILTRANDO TRANSAÇÕES BANCO (Dashboard):', { bankName, month, year, totalTransactions: transactions?.length || 0 });
-    
-    if (!transactions || !Array.isArray(transactions)) {
-      console.log('❌ SEM TRANSAÇÕES DISPONÍVEIS');
-      return [];
-    }
-
-    // Primeiro, filtrar transações do mês específico
-    const monthTransactions = transactions.filter(t => {
+    return transactions.filter(t => {
       const transactionDate = new Date(t.date);
       const transactionMonth = transactionDate.getMonth();
       const transactionYear = transactionDate.getFullYear();
@@ -902,101 +1089,7 @@ const DashboardPage = () => {
                             t.recurringParentId;
       
       return isBankMatch && isDateMatch && isValidPayment;
-    });
-
-    // Buscar templates recorrentes para este banco
-    const recurringTemplates = transactions.filter(transaction => {
-      return transaction.isRecurring && 
-             transaction.bank === bankName && 
-             (transaction.paymentMethod === 'debito' || transaction.paymentMethod === 'pix');
-    });
-
-    console.log('🔄 Templates recorrentes encontrados (Banco):', recurringTemplates.length);
-
-    // Para cada template, verificar se existe transação para o mês solicitado
-    recurringTemplates.forEach(template => {
-      const existingTransaction = monthTransactions.find(t => 
-        t.recurringParentId === template._id
-      );
-
-      if (!existingTransaction) {
-        console.log('🚀 Gerando transação recorrente virtual para banco:', template.description);
-        
-        // Determinar o dia da transação no mês
-        const templateDate = new Date(template.date);
-        const targetDay = Math.min(template.recurringDay || templateDate.getDate(), new Date(year, month + 1, 0).getDate());
-        const virtualDate = new Date(year, month, targetDay, 12, 0, 0);
-
-        // Criar transação virtual
-        const virtualTransaction = {
-          ...template,
-          _id: `virtual-bank-${template._id}-${year}-${month + 1}`, // Mês em formato 1-12 para ID
-          date: virtualDate,
-          isRecurring: false,
-          isFixed: true,
-          recurringParentId: template._id,
-          isVirtual: true
-        };
-
-        monthTransactions.push(virtualTransaction);
-        console.log('✅ Transação virtual criada (Banco):', virtualTransaction.description, virtualDate.toISOString().split('T')[0]);
-      }
-    });
-
-    // Buscar transações parceladas (installments) para este banco
-    const installmentTransactions = transactions.filter(t => {
-      return t.isInstallment && 
-             t.bank === bankName && 
-             (t.paymentMethod === 'debito' || t.paymentMethod === 'pix') &&
-             t.parentTransactionId; // Só pegar parcelamentos filhos
-    });
-
-    console.log('💳 Parcelamentos encontrados (Dashboard Banco):', installmentTransactions.length);
-
-    // Para cada parcelamento, verificar se deve aparecer no mês solicitado
-    installmentTransactions.forEach(installment => {
-      const installmentDate = new Date(installment.date);
-      const installmentMonth = installmentDate.getMonth();
-      const installmentYear = installmentDate.getFullYear();
-      
-      // Verificar se esta parcela pertence ao mês solicitado
-      if (installmentMonth === month && installmentYear === year) {
-        // Verificar se já não foi adicionada
-        const existingInstallment = monthTransactions.find(t => t._id === installment._id);
-        if (!existingInstallment) {
-          monthTransactions.push(installment);
-          console.log('✅ Parcelamento adicionado (Dashboard Banco):', installment.description, 
-                     `${installment.installmentNumber}/${installment.totalInstallments}`);
-        }
-      }
-    });
-
-    return monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-  };
-
-  // Calcular saldo do banco para o mês selecionado
-  const calculateBankBalance = (bankName) => {
-    const bankTransactions = getBankTransactionsByMonth(bankName, selectedMonth - 1, selectedYear);
-    
-    return bankTransactions.reduce((sum, t) => {
-      if (t.type === 'income') {
-        return sum + (t.amount || 0);
-      } else {
-        return sum - (t.amount || 0);
-      }
-    }, 0);
-  };
-
-  // Calcular receitas do banco para o mês selecionado
-  const calculateBankIncome = (bankName) => {
-    const bankTransactions = getBankTransactionsByMonth(bankName, selectedMonth - 1, selectedYear);
-    return bankTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-  };
-
-  // Calcular despesas do banco para o mês selecionado
-  const calculateBankExpenses = (bankName) => {
-    const bankTransactions = getBankTransactionsByMonth(bankName, selectedMonth - 1, selectedYear);
-    return bankTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
   // Abrir modal de extrato do banco
@@ -1033,6 +1126,11 @@ const DashboardPage = () => {
     ];
     return months[month];
   };
+
+  // Sincronizar ref com estado atual
+  useEffect(() => {
+    transactionsLengthRef.current = transactions.length;
+  }, [transactions.length]);
 
   // useEffect para carregamento inicial (apenas uma vez)
   useEffect(() => {
@@ -1190,31 +1288,11 @@ const DashboardPage = () => {
           <div className="cards-grid-dashboard">
             {creditCards.length > 0 ? (
               creditCards.map((card) => {
-                console.log('🔍 DEBUG CARTÃO:', {
-                  cardName: card.name,
-                  selectedMonth,
-                  selectedYear,
-                  totalTransactions: transactions.length,
-                  creditTransactions: transactions.filter(t => t.paymentMethod === 'credito').length
-                });
-                
                 const expenses = calculateDashboardCardExpensesByMonth(card.name, selectedMonth, selectedYear);
                 const committed = calculateDashboardCommittedBalance(card.name);
-                const currentBalance = calculateCurrentBalance(card.name); // Saldo já lançado
-                const pendingAmount = calculateDashboardPendingAmount(card.name); // A ser lançado
-                
-                console.log('💰 VALORES CALCULADOS:', {
-                  cardName: card.name,
-                  currentBalance: currentBalance, // Já lançado
-                  committed: committed, // Futuro
-                  totalUsed: currentBalance + committed, // Total comprometido
-                  limit: card.limit
-                });
-                
-                const currentPercentage = card.limit > 0 ? ((currentBalance || 0) / card.limit) * 100 : 0;
+                const usagePercentage = card.limit > 0 ? ((expenses || 0) / card.limit) * 100 : 0;
                 const committedPercentage = card.limit > 0 ? ((committed || 0) / card.limit) * 100 : 0;
-                const totalPercentage = Math.min(currentPercentage + committedPercentage, 100);
-                const availableLimit = Math.max(0, card.limit - currentBalance - committed);
+                const totalPercentage = Math.min(usagePercentage + committedPercentage, 100);
 
                 return (
                   <div key={card._id} className="credit-card-simple">
@@ -1226,34 +1304,28 @@ const DashboardPage = () => {
                       <div className="card-header-simple">
                         <div className="card-name-header">
                           <h3 className="card-name-top">{card.name}</h3>
-                          {pendingAmount > 0 && (
-                            <div className="pending-indicator-dashboard">
-                              <span className="pending-label">A ser lançado</span>
-                              <span className="pending-value">R$ {pendingAmount.toFixed(2)}</span>
-                            </div>
-                          )}
                         </div>
                       </div>
 
                       <div className="card-financial-data">
                         <div className="financial-row">
                           <div className="financial-item">
-                            <span className="financial-label">Limite Total</span>
+                            <span className="financial-label">Limite</span>
                             <span className="financial-value">R$ {(card.limit || 0).toFixed(2)}</span>
                           </div>
                           <div className="financial-item">
-                            <span className="financial-label">💳 Gasto do Mês</span>
-                            <span className="financial-value expense">R$ {currentBalance.toFixed(2)}</span>
+                            <span className="financial-label">Gasto</span>
+                            <span className="financial-value expense">R$ {expenses.toFixed(2)}</span>
                           </div>
                         </div>
                         <div className="financial-row">
                           <div className="financial-item">
-                            <span className="financial-label">⏳ Parcelas Futuras</span>
+                            <span className="financial-label">Comprometido</span>
                             <span className="financial-value committed">R$ {committed.toFixed(2)}</span>
                           </div>
                           <div className="financial-item">
-                            <span className="financial-label">✅ Disponível</span>
-                            <span className="financial-value available">R$ {availableLimit.toFixed(2)}</span>
+                            <span className="financial-label">Disponível</span>
+                            <span className="financial-value available">R$ {Math.max(0, (card.limit || 0) - expenses - committed).toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
@@ -1261,18 +1333,18 @@ const DashboardPage = () => {
                       {card.limit > 0 && (
                         <div className="usage-bar-simple">
                           <div className="usage-info-simple">
-                            <span>💳 Gasto: {currentPercentage.toFixed(1)}% • ⏳ Parcelas: {committedPercentage.toFixed(1)}%</span>
+                            <span>Utilizado: {totalPercentage.toFixed(1)}%</span>
                           </div>
                           <div className="progress-bar-simple">
                             <div 
-                              className={`progress-fill-simple current ${currentPercentage > 80 ? 'danger' : currentPercentage > 60 ? 'warning' : 'normal'}`}
-                              style={{ width: `${currentPercentage}%` }}
+                              className={`progress-fill-simple current ${usagePercentage > 80 ? 'danger' : usagePercentage > 60 ? 'warning' : 'normal'}`}
+                              style={{ width: `${usagePercentage}%` }}
                             />
                             <div 
                               className="progress-fill-simple committed"
                               style={{ 
                                 width: `${committedPercentage}%`,
-                                marginLeft: `${currentPercentage}%`
+                                marginLeft: `${usagePercentage}%`
                               }}
                             />
                           </div>
@@ -1320,15 +1392,35 @@ const DashboardPage = () => {
           {banks.length > 0 ? (
             <div className="cards-grid">
               {banks.map((bank) => {
-                // Calcular saldo baseado nas transações do mês selecionado (usar função corrigida)
-                const balance = calculateBankBalance(bank.name);
+                // Calcular saldo baseado nas transações do período (mesma lógica da página de bancos)
+                const balance = transactions.filter(t => 
+                  t.bank === bank.name && 
+                  (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+                ).reduce((sum, t) => {
+                  if (t.type === 'income') {
+                    return sum + (t.amount || 0);
+                  } else {
+                    return sum - (t.amount || 0);
+                  }
+                }, 0);
                 
-                // Calcular receitas e despesas do mês selecionado (usar funções corrigidas)
-                const income = calculateBankIncome(bank.name);
-                const expenses = calculateBankExpenses(bank.name);
+                // Calcular receitas e despesas do período
+                const income = transactions.filter(t => 
+                  t.bank === bank.name && 
+                  t.type === 'income' && 
+                  (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+                ).reduce((sum, t) => sum + (t.amount || 0), 0);
                 
-                const monthTransactions = getBankTransactionsByMonth(bank.name, selectedMonth - 1, selectedYear);
-                const transactionCount = monthTransactions.length;
+                const expenses = transactions.filter(t => 
+                  t.bank === bank.name && 
+                  t.type === 'expense' && 
+                  (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+                ).reduce((sum, t) => sum + (t.amount || 0), 0);
+                
+                const transactionCount = transactions.filter(t => 
+                  t.bank === bank.name && 
+                  (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+                ).length;
                 
                 return (
                   <div key={bank._id} className="credit-card-simple" onClick={() => openBankModal(bank)} style={{ cursor: 'pointer' }}>
@@ -1428,19 +1520,11 @@ const DashboardPage = () => {
                               {transaction.installmentNumber}/{transaction.totalInstallments}
                             </span>
                           )}
-                          {(transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) && (
-                            <span className="fixed-badge" style={{
-                              backgroundColor: '#28a745',
-                              color: 'white',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '10px',
-                              fontWeight: 'bold',
-                              marginLeft: '8px'
-                            }}>FIXA</span>
+                          {transaction.isFixed && !transaction.isVirtualFixed && (
+                            <span className="fixed-badge">FIXA</span>
                           )}
                           {transaction.isVirtualFixed && (
-                            <span className="virtual-fixed">FIXA (AUTO)</span>
+                            <span className="fixed-badge virtual-fixed">FIXA (AUTO)</span>
                           )}
                         </div>
                         <div className="category-line">
@@ -1528,29 +1612,29 @@ const DashboardPage = () => {
               <div className="card-modal-stats">
                 <div className="modal-stat-grid">
                   <div className="modal-stat-item">
-                    <div className="modal-stat-label">💳 Gasto do Mês</div>
+                    <div className="modal-stat-label">Gasto neste mês</div>
                     <div className="modal-stat-value expense">
-                      R$ {calculateCurrentBalance(selectedCardForModal.name).toFixed(2)}
+                      R$ {calculateDashboardCardExpensesByMonth(selectedCardForModal.name, currentModalMonth, currentModalYear).toFixed(2)}
                     </div>
                   </div>
                   <div className="modal-stat-item">
-                    <div className="modal-stat-label">⏳ Parcelas Futuras do Mês</div>
-                    <div className="modal-stat-value committed">
-                      R$ {calculateDashboardCommittedBalance(selectedCardForModal.name).toFixed(2)}
+                    <div className="modal-stat-label">Número de transações</div>
+                    <div className="modal-stat-value">
+                      {getDashboardCardTransactionsByMonth(selectedCardForModal.name, currentModalMonth, currentModalYear).length}
                     </div>
                   </div>
                   <div className="modal-stat-item">
-                    <div className="modal-stat-label">✅ Disponível no Limite</div>
+                    <div className="modal-stat-label">Disponível total</div>
                     <div className="modal-stat-value available">
                       R$ {Math.max(0, (selectedCardForModal.limit || 0) - 
-                          calculateCurrentBalance(selectedCardForModal.name) - 
+                          calculateDashboardCardExpenses(selectedCardForModal.name) - 
                           calculateDashboardCommittedBalance(selectedCardForModal.name)).toFixed(2)}
                     </div>
                   </div>
                   <div className="modal-stat-item">
-                    <div className="modal-stat-label">Transações neste mês</div>
+                    <div className="modal-stat-label">Limite total</div>
                     <div className="modal-stat-value">
-                      {getDashboardCardTransactionsByMonth(selectedCardForModal.name, currentModalMonth, currentModalYear).length}
+                      R$ {(selectedCardForModal.limit || 0).toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -1582,19 +1666,10 @@ const DashboardPage = () => {
                         return categoryIcons[category?.toLowerCase()] || (type === 'income' ? '💰' : '💳');
                       };
 
-                      // Verificar se a transação já foi lançada
-                      const today = new Date();
-                      today.setHours(23, 59, 59, 999); // Fim do dia atual
-                      const transactionDate = new Date(transaction.date);
-                      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-                      const isLaunched = transactionDate <= today;
-
                       return (
-                        <div key={transaction._id || index} className={`transaction-item-extract ${!isLaunched ? 'future-transaction' : 'launched-transaction'}`}>
+                        <div key={transaction._id || index} className="transaction-item-extract">
                           <div className="extract-date">
                             {new Date(transaction.date).toLocaleDateString('pt-BR')}
-                            {!isLaunched && <span className="status-badge future">⏳ A SER LANÇADA</span>}
-                            {isLaunched && <span className="status-badge launched">✅ LANÇADA</span>}
                           </div>
                           <div className="extract-main">
                             <div className="extract-description">
@@ -1605,11 +1680,11 @@ const DashboardPage = () => {
                                     {transaction.installmentNumber}/{transaction.totalInstallments}
                                   </span>
                                 )}
-                                {(transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) && (
+                                {transaction.isFixed && !transaction.isVirtualFixed && (
                                   <span className="fixed-badge">FIXA</span>
                                 )}
                                 {transaction.isVirtualFixed && (
-                                  <span className="virtual-fixed">FIXA (AUTO)</span>
+                                  <span className="fixed-badge virtual-fixed">FIXA (AUTO)</span>
                                 )}
                               </div>
                               <div className="category-line">
@@ -1745,7 +1820,14 @@ const DashboardPage = () => {
                             <div className="extract-description">
                               <div className="description-line">
                                 <strong>{transaction.description}</strong>
-                                {renderTransactionBadges(transaction)}
+                                {transaction.isInstallment && (
+                                  <span className="installment-badge">
+                                    {transaction.installmentNumber}/{transaction.totalInstallments}
+                                  </span>
+                                )}
+                                {transaction.isFixed && (
+                                  <span className="fixed-badge">FIXA</span>
+                                )}
                               </div>
                               <div className="category-line">
                                 {getCategoryIcon(transaction.category, transaction.type)} {transaction.category}
@@ -1846,7 +1928,8 @@ const AddTransactionModal = ({ onSave, onCancel, creditCards = [] }) => {
 
     const transactionData = {
       ...formData,
-      amount: numericAmount
+      amount: numericAmount,
+      isFixed: formData.isRecurring // ADICIONADO: Sincronizar isFixed com isRecurring
     };
 
     onSave(transactionData);
@@ -2203,10 +2286,10 @@ const AllTransactionsPage = () => {
   const [transactionToDelete, setTransactionToDelete] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'debit_pix', 'credit'
 
   // Estados para controle de loading e cancelamento de requests
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isUpdatingFixedFlags, setIsUpdatingFixedFlags] = useState(false);
   const loadingRef = useRef(null);
   const abortControllerRef = useRef(null);
   const lastLoadParamsRef = useRef(null);
@@ -2218,6 +2301,7 @@ const AllTransactionsPage = () => {
     
     // Se já está carregando os MESMOS dados, não fazer nada
     if (loadingRef.current === requestKey) {
+      console.log('🔄 Já carregando transações para este período, ignorando...');
       return;
     }
     
@@ -2232,14 +2316,36 @@ const AllTransactionsPage = () => {
     setIsLoadingData(true);
     
     try {
-      const response = await axios.get(`/transactions`, {
-        signal: abortControllerRef.current.signal
-      });
+      // CORREÇÃO SIMPLES: Buscar transações do mês atual + todas as transações para encontrar fixas
+      const [currentMonthResponse, allTransactionsResponse] = await Promise.all([
+        axios.get(`/transactions?month=${month}&year=${year}`, {
+          signal: abortControllerRef.current.signal
+        }),
+        // Buscar TODAS as transações para encontrar as fixas
+        axios.get('/transactions', {
+          signal: abortControllerRef.current.signal
+        }).catch(() => ({ data: [] })) // Se falhar, continua só com do mês
+      ]);
       
       // Processar apenas se ainda é a requisição ativa
       if (loadingRef.current === requestKey) {
-        const allTransactions = response.data || [];
-        setTransactions(allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)));
+        const currentMonthTransactions = currentMonthResponse.data || [];
+        const allTransactions = allTransactionsResponse.data || [];
+        
+        // CORREÇÃO: Usar a função utilitária
+        const virtualFixedTransactions = replicateFixedTransactions(
+          currentMonthTransactions, 
+          allTransactions, 
+          month, 
+          year
+        );
+        
+        // Combinar todas as transações
+        const allCombinedTransactions = [...currentMonthTransactions, ...virtualFixedTransactions];
+        
+        console.log(`✅ Total: ${currentMonthTransactions.length} reais + ${virtualFixedTransactions.length} virtuais fixas = ${allCombinedTransactions.length}`);
+        
+        setTransactions(allCombinedTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)));
         lastLoadParamsRef.current = currentParams;
       }
       
@@ -2364,16 +2470,23 @@ const AllTransactionsPage = () => {
     };
   }, []);
 
-  // Função para filtrar transações por tipo de pagamento
-  const getFilteredTransactions = () => {
-    if (paymentFilter === 'all') {
-      return transactions;
-    } else if (paymentFilter === 'debit_pix') {
-      return transactions.filter(t => t.paymentMethod === 'debito' || t.paymentMethod === 'pix');
-    } else if (paymentFilter === 'credit') {
-      return transactions.filter(t => t.paymentMethod === 'credito');
+  // Função para atualizar flags de transações fixas
+  const handleUpdateFixedFlags = async () => {
+    setIsUpdatingFixedFlags(true);
+    try {
+      const updatedCount = await updateExistingFixedTransactions();
+      if (updatedCount > 0) {
+        alert(`✅ ${updatedCount} transações foram atualizadas como fixas!`);
+        // Recarregar a página para mostrar as badges
+        loadTransactions();
+      } else {
+        alert('ℹ️ Nenhuma transação precisou ser atualizada.');
+      }
+    } catch (error) {
+      alert('❌ Erro ao atualizar transações: ' + error.message);
+    } finally {
+      setIsUpdatingFixedFlags(false);
     }
-    return transactions;
   };
 
   if (loading) {
@@ -2391,20 +2504,26 @@ const AllTransactionsPage = () => {
         onMonthChange={handleMonthChange}
       />
 
-      {/* Filtro de tipo de pagamento */}
-      <div className="payment-filter-container">
-        <div className="filter-group">
-          <label>Filtrar por tipo:</label>
-          <select 
-            value={paymentFilter} 
-            onChange={(e) => setPaymentFilter(e.target.value)}
-            className="filter-select"
-          >
-            <option value="all">Todos</option>
-            <option value="debit_pix">Débito/PIX</option>
-            <option value="credit">Crédito</option>
-          </select>
-        </div>
+      {/* Botão para atualizar flags de transações fixas */}
+      <div style={{ margin: '20px 0', textAlign: 'center' }}>
+        <button 
+          className="btn btn-secondary"
+          onClick={handleUpdateFixedFlags}
+          disabled={isUpdatingFixedFlags}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: isUpdatingFixedFlags ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: '500',
+            opacity: isUpdatingFixedFlags ? 0.6 : 1
+          }}
+        >
+          {isUpdatingFixedFlags ? '⏳ Atualizando...' : '🔧 Atualizar Badges de Transações Fixas'}
+        </button>
       </div>
 
       {/* Lista de transações */}
@@ -2423,7 +2542,7 @@ const AllTransactionsPage = () => {
           </div>
         ) : (
           <div className="transactions-list-enhanced">
-            {getFilteredTransactions().map(transaction => {
+            {transactions.map(transaction => {
               // Ícones bonitos baseados na categoria
               const getIconForCategory = (category, type) => {
                 const categoryIcons = {
@@ -2454,12 +2573,22 @@ const AllTransactionsPage = () => {
                             {transaction.installmentNumber}/{transaction.totalInstallments}
                           </span>
                         )}
-                        {(transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) && (
-                          <span className="fixed-badge">FIXA</span>
-                        )}
-                        {transaction.isVirtualFixed && (
-                          <span className="virtual-fixed">FIXA (AUTO)</span>
-                        )}
+                        {(() => {
+                          // Detectar se é transação fixa - agora usando a função padronizada
+                          const isFixedTransaction = transaction.isFixed || 
+                                                   transaction.isRecurring ||
+                                                   detectFixedByKeywords(transaction.description);
+                          
+                          if (isFixedTransaction && !transaction.isVirtualFixed) {
+                            return <span className="fixed-badge">FIXA</span>;
+                          }
+                          
+                          if (transaction.isVirtualFixed) {
+                            return <span className="fixed-badge virtual-fixed">FIXA (AUTO)</span>;
+                          }
+                          
+                          return null;
+                        })()}
                       </div>
                       <div className="category-line">
                         {getIconForCategory(transaction.category, transaction.type)} {transaction.category}
@@ -2710,7 +2839,6 @@ const CreditCardPage = () => {
   const [cardToDelete, setCardToDelete] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'debit_pix', 'credit'
 
   // Estados para o modal de transações
   const [showCardModal, setShowCardModal] = useState(false);
@@ -2723,24 +2851,45 @@ const CreditCardPage = () => {
   const loadingRef = useRef(null);
   const abortControllerRef = useRef(null);
   const lastLoadParamsRef = useRef(null);
+  const creditCardsLengthRef = useRef(0); // Ref para evitar recriação do loadData
 
   // Carregar cartões e transações
-  const loadData = useCallback(async (month = selectedMonth, year = selectedYear) => {
-    // Chave única para a requisição
+  const loadData = useCallback(async (month = selectedMonth, year = selectedYear, forceReload = false) => {
     const requestKey = `creditcards-${month}-${year}`;
     const currentParams = `${month}-${year}`;
     
-    // Se já está carregando os MESMOS dados, não fazer nada
-    if (loadingRef.current === requestKey) {
+    // CORREÇÃO: Permitir carregamento inicial SEMPRE se não há dados
+    const isInitialLoad = creditCardsLengthRef.current === 0 && !lastLoadParamsRef.current;
+    
+    // CORREÇÃO: Se já está carregando os MESMOS dados E não é carregamento inicial, aguardar
+    if (loadingRef.current === requestKey && !isInitialLoad && !forceReload) {
+      console.log('🔄 Já carregando cartões para este período, ignorando...');
       return;
     }
     
+    // Cancelar apenas se for requisição DIFERENTE
+    if (abortControllerRef.current && loadingRef.current && loadingRef.current !== requestKey) {
+      console.log('⏹️ Cancelando requisição anterior (nova solicitação)');
+      abortControllerRef.current.abort();
+    }
+    
+    // CORREÇÃO: Cache apenas se NÃO for carregamento inicial
+    if (!forceReload && !isInitialLoad && lastLoadParamsRef.current === currentParams && loadingRef.current !== requestKey && creditCardsLengthRef.current > 0) {
+      console.log('📋 Dados já carregados para este período, usando cache');
+      return;
+    }
+    
+    console.log(`🚀 Iniciando carregamento: ${requestKey}, forceReload=${forceReload}, isInitialLoad=${isInitialLoad}`);
+    
     loadingRef.current = requestKey;
+    abortControllerRef.current = new AbortController();
     setIsLoadingData(true);
     
     try {
       // Carregar cartões cadastrados
-      const cardsResponse = await axios.get('/credit-cards');
+      const cardsResponse = await axios.get('/credit-cards', {
+        signal: abortControllerRef.current.signal
+      });
       const sortedCards = (cardsResponse.data || []).sort((a, b) => {
         const dateA = new Date(a.createdAt || a._id);
         const dateB = new Date(b.createdAt || b._id);
@@ -2748,23 +2897,60 @@ const CreditCardPage = () => {
       });
       
       // Carregar transações para calcular gastos
-      const transactionsResponse = await axios.get(`/transactions`);
+      const [transactionsResponse] = await Promise.all([
+        // CORREÇÃO: Buscar todas as transações
+        axios.get('/transactions', {
+          signal: abortControllerRef.current.signal,
+          timeout: 12000
+        })
+      ]);
       
       // Processar apenas se ainda é a requisição ativa
       if (loadingRef.current === requestKey) {
         setCreditCards(sortedCards);
-        setTransactions(transactionsResponse.data || []);
+        creditCardsLengthRef.current = sortedCards.length;
+        
+        // CORREÇÃO: Usar a função utilitária
+        const allTransactions = transactionsResponse.data || [];
+        
+        // Filtrar transações do mês atual
+        const currentMonthTransactions = allTransactions.filter(transaction => {
+          const transactionDate = new Date(transaction.date);
+          return transactionDate.getMonth() === month - 1 && 
+                 transactionDate.getFullYear() === year;
+        });
+        
+        // Replicar transações fixas (todos os tipos de pagamento)
+        const virtualFixedTransactions = replicateFixedTransactions(
+          currentMonthTransactions, 
+          allTransactions, 
+          month, 
+          year
+        );
+        
+        const finalTransactions = [...currentMonthTransactions, ...virtualFixedTransactions];
+        setTransactions(finalTransactions);
         
         if (month !== selectedMonth) setSelectedMonth(month);
         if (year !== selectedYear) setSelectedYear(year);
         
         lastLoadParamsRef.current = currentParams;
+        console.log(`✅ Cartões carregados: ${sortedCards.length} cartões, ${finalTransactions.length} transações`);
       }
       
     } catch (error) {
-      console.error('❌ Erro ao carregar cartões:', error);
+      if (error.name === 'CanceledError' || 
+          error.code === 'ERR_CANCELED' || 
+          error.name === 'AbortError' ||
+          error.message === 'canceled') {
+        console.log('🚫 Requisição cancelada - operação normal');
+        return;
+      }
+      
+      console.error('❌ Erro real ao carregar cartões:', error);
       if (loadingRef.current === requestKey) {
         setCreditCards([]);
+        creditCardsLengthRef.current = 0;
         setTransactions([]);
       }
     } finally {
@@ -2774,152 +2960,40 @@ const CreditCardPage = () => {
         loadingRef.current = null;
       }
     }
-  }, [selectedMonth, selectedYear]); // REMOVIDO isLoadingData das dependências
+  }, []); // Dependências vazias para evitar recriação
 
   const handleMonthChange = useCallback((month, year) => {
     setSelectedMonth(month);
     setSelectedYear(year);
-    loadData(month, year);
+    loadData(month, year, true); // forceReload = true para mudança de mês
   }, [loadData]);
 
-  // Calcular gastos de um cartão baseado nas transações (APENAS LANÇADAS)
+  // Calcular gastos de um cartão baseado nas transações
   const calculateCardExpenses = useCallback((cardName) => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
-    
-    const cardTransactions = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      const transactionMonth = transactionDate.getMonth() + 1;
-      const transactionYear = transactionDate.getFullYear();
-      
-      const isCorrectCard = t.creditCard === cardName;
-      const isCorrectType = t.paymentMethod === 'credito';
-      const isCorrectMonth = transactionMonth === selectedMonth;
-      const isCorrectYear = transactionYear === selectedYear;
-      const isLaunched = transactionDate <= today; // APENAS TRANSAÇÕES JÁ LANÇADAS
-      
-      return isCorrectCard && isCorrectType && isCorrectMonth && isCorrectYear && isLaunched;
-    });
+    const cardTransactions = transactions.filter(t => 
+      t.creditCard === cardName && 
+      t.paymentMethod === 'credito' &&
+      new Date(t.date).getMonth() + 1 === selectedMonth &&
+      new Date(t.date).getFullYear() === selectedYear
+    );
     
     return cardTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
   }, [transactions, selectedMonth, selectedYear]);
 
-  // Calcular valor total A SER LANÇADO (transações futuras) do cartão no mês
-  const calculatePendingCardExpenses = useCallback((cardName) => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
-    
-    const pendingTransactions = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      const transactionMonth = transactionDate.getMonth() + 1;
-      const transactionYear = transactionDate.getFullYear();
-      
-      const isCorrectCard = t.creditCard === cardName;
-      const isCorrectType = t.paymentMethod === 'credito';
-      const isCorrectMonth = transactionMonth === selectedMonth;
-      const isCorrectYear = transactionYear === selectedYear;
-      const isPending = transactionDate > today; // APENAS TRANSAÇÕES FUTURAS
-      
-      return isCorrectCard && isCorrectType && isCorrectMonth && isCorrectYear && isPending;
-    });
-    
-    return pendingTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions, selectedMonth, selectedYear]);
-
-  // Calcular saldo atual (já lançado) do cartão no mês selecionado
-  const calculateCurrentCardBalance = useCallback((cardName) => {
-    if (!transactions || !Array.isArray(transactions)) return 0;
-    
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
-    
-    // Transações já lançadas do MÊS SELECIONADO
-    const currentTransactions = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      const transactionMonth = transactionDate.getMonth() + 1;
-      const transactionYear = transactionDate.getFullYear();
-      
-      return t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             transactionMonth === selectedMonth && // APENAS MÊS SELECIONADO
-             transactionYear === selectedYear &&
-             transactionDate <= today; // Data atual ou passada = já lançada
-    });
-    
-    return currentTransactions.reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions, selectedMonth, selectedYear]);
-
-  // Calcular saldo comprometido (parcelamentos futuros) do cartão no mês selecionado
-  const calculateCommittedCardBalance = useCallback((cardName) => {
-    if (!transactions || !Array.isArray(transactions)) return 0;
-    
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
-    
-    // APENAS parcelamentos futuros do MÊS SELECIONADO
-    const futureInstallments = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      const transactionMonth = transactionDate.getMonth() + 1;
-      const transactionYear = transactionDate.getFullYear();
-      
-      return t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             t.isInstallment && // APENAS PARCELAMENTOS
-             transactionMonth === selectedMonth && // APENAS MÊS SELECIONADO
-             transactionYear === selectedYear &&
-             transactionDate > today; // Data futura dentro do mês
-    });
-    
-    return futureInstallments.reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions, selectedMonth, selectedYear]);
-
   // Calcular saldo comprometido com parcelamentos futuros
   const calculateCommittedBalance = useCallback((cardName) => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
+    const selectedDate = new Date(selectedYear, selectedMonth - 1, 1);
+    selectedDate.setHours(0, 0, 0, 0);
     
-    const futureInstallments = transactions.filter(t => {
-      const transactionDate = new Date(t.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      
-      return t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             t.isInstallment &&
-             transactionDate > today; // Data futura = não lançada
-    });
+    const futureInstallments = transactions.filter(t => 
+      t.creditCard === cardName && 
+      t.paymentMethod === 'credito' &&
+      t.isInstallment &&
+      new Date(t.date) >= selectedDate
+    );
     
     return futureInstallments.reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions]);
-
-  // Função auxiliar para renderizar badges de transações na página de cartões
-  const renderCardTransactionBadges = useCallback((transaction) => {
-    const badges = [];
-    
-    // Badge de parcela
-    if (transaction.isInstallment) {
-      badges.push(
-        <span key="installment" className="installment-badge">
-          {transaction.installmentNumber}/{transaction.totalInstallments}
-        </span>
-      );
-    }
-    
-    // Badge de transação fixa/recorrente
-    if (transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) {
-      const isVirtual = transaction.isVirtual;
-      badges.push(
-        <span key="fixed" className={isVirtual ? "virtual-fixed-badge" : "fixed-badge"}>
-          {isVirtual ? "FIXA (AUTO)" : "FIXA"}
-        </span>
-      );
-    }
-    
-    return badges;
-  }, []);
+  }, [transactions, selectedMonth, selectedYear]);
 
   // Abrir modal de transações do cartão
   const openCardModal = useCallback((card) => {
@@ -2956,106 +3030,25 @@ const CreditCardPage = () => {
     return months[month];
   }, []);
 
-  // Filtrar transações por mês/ano específico com geração de recorrentes
+  // Filtrar transações por mês/ano específico
   const getCardTransactionsByMonth = useCallback((cardName, month, year) => {
     if (!cardName) return [];
     
-    console.log('🔍 FILTRANDO TRANSAÇÕES CARTÃO (Página):', { cardName, month, year, totalTransactions: transactions?.length || 0 });
-    
-    // Primeiro, filtrar transações do mês específico
-    const monthTransactions = transactions.filter(transaction => {
+    const allTransactions = transactions.filter(transaction => {
       if (transaction.paymentMethod === 'credito' && transaction.creditCard === cardName) {
         const transactionDate = new Date(transaction.date);
-        const transactionMonth = transactionDate.getMonth();
-        const transactionYear = transactionDate.getFullYear();
-        return transactionMonth === month && transactionYear === year;
+        return transactionDate.getMonth() === month && transactionDate.getFullYear() === year;
       }
       return false;
     });
 
-    // Buscar templates recorrentes para este cartão
-    const recurringTemplates = transactions.filter(transaction => {
-      return transaction.isRecurring && 
-             transaction.creditCard === cardName && 
-             transaction.paymentMethod === 'credito';
-    });
-
-    console.log('🔄 Templates recorrentes encontrados:', recurringTemplates.length);
-
-    // Para cada template, verificar se existe transação para o mês solicitado
-    recurringTemplates.forEach(template => {
-      const existingTransaction = monthTransactions.find(t => 
-        t.recurringParentId === template._id
-      );
-
-      if (!existingTransaction) {
-        console.log('🚀 Gerando transação recorrente virtual para:', template.description);
-        
-        // Determinar o dia da transação no mês
-        const templateDate = new Date(template.date);
-        const targetDay = Math.min(template.recurringDay || templateDate.getDate(), new Date(year, month + 1, 0).getDate());
-        const virtualDate = new Date(year, month, targetDay, 12, 0, 0);
-
-        // Criar transação virtual
-        const virtualTransaction = {
-          ...template,
-          _id: `virtual-${template._id}-${year}-${month}`,
-          date: virtualDate,
-          isRecurring: false,
-          isFixed: true,
-          recurringParentId: template._id,
-          isVirtual: true
-        };
-
-        monthTransactions.push(virtualTransaction);
-        console.log('✅ Transação virtual criada:', virtualTransaction.description, virtualDate.toISOString().split('T')[0]);
-      }
-    });
-
-    // Buscar transações parceladas (installments) para este cartão
-    const installmentTransactions = transactions.filter(t => {
-      return t.isInstallment && 
-             t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             t.parentTransactionId; // Só pegar parcelamentos filhos
-    });
-
-    console.log('💳 Parcelamentos encontrados (Página Cartão):', installmentTransactions.length);
-
-    // Para cada parcelamento, verificar se deve aparecer no mês solicitado
-    installmentTransactions.forEach(installment => {
-      const installmentDate = new Date(installment.date);
-      const installmentMonth = installmentDate.getMonth();
-      const installmentYear = installmentDate.getFullYear();
-      
-      // Verificar se esta parcela pertence ao mês solicitado
-      if (installmentMonth === month && installmentYear === year) {
-        // Verificar se já não foi adicionada
-        const existingInstallment = monthTransactions.find(t => t._id === installment._id);
-        if (!existingInstallment) {
-          monthTransactions.push(installment);
-          console.log('✅ Parcelamento adicionado (Página Cartão):', installment.description, 
-                     `${installment.installmentNumber}/${installment.totalInstallments}`);
-        }
-      }
-    });
-
-    return monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [transactions]);
 
-  // Calcular gastos de um mês específico (APENAS TRANSAÇÕES LANÇADAS)
+  // Calcular gastos de um mês específico
   const calculateCardExpensesByMonth = useCallback((cardName, month, year) => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999); // Fim do dia atual
-    
     const monthTransactions = getCardTransactionsByMonth(cardName, month, year);
-    const launchedTransactions = monthTransactions.filter(transaction => {
-      const transactionDate = new Date(transaction.date);
-      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-      return transactionDate <= today; // APENAS TRANSAÇÕES JÁ LANÇADAS
-    });
-    
-    return launchedTransactions.reduce((total, transaction) => {
+    return monthTransactions.reduce((total, transaction) => {
       return total + (transaction.amount || 0);
     }, 0);
   }, [getCardTransactionsByMonth]);
@@ -3118,23 +3111,33 @@ const CreditCardPage = () => {
     return Math.min((expenses / limit) * 100, 100);
   }, []);
 
-  // useEffect para carregamento inicial
+  // Sincronizar ref com estado atual
   useEffect(() => {
-    // Aguardar um pouco para evitar cancelamento duplo do React StrictMode
-    const timer = setTimeout(() => {
-      loadData();
+    creditCardsLengthRef.current = creditCards.length;
+  }, [creditCards.length]);
+
+  // useEffect para carregamento inicial (CORRIGIDO)
+  useEffect(() => {
+    console.log('🚀 CreditCardPage: Carregamento inicial');
+    
+    // CORREÇÃO: Limpar refs para garantir carregamento inicial
+    lastLoadParamsRef.current = null;
+    loadingRef.current = null;
+    creditCardsLengthRef.current = 0;
+    
+    // CORREÇÃO: Delay pequeno para garantir que o componente está montado
+    const timeoutId = setTimeout(() => {
+      console.log('⏱️ Executando carregamento inicial com delay');
+      loadData(selectedMonth, selectedYear, true); // forceReload = true
     }, 100);
     
     return () => {
-      clearTimeout(timer);
+      clearTimeout(timeoutId);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
     };
-    
-    // CORREÇÃO: Removido event listener customizado - usar apenas triggerRefresh do Context
-    
-    return () => {
-      // Cleanup apenas se necessário
-    };
-  }, []); // Dependências vazias para executar apenas na montagem
+  }, []); // Dependências vazias - executar apenas na montagem
 
   // Escutar mudanças no refreshTrigger para atualizar automaticamente
   useEffect(() => {
@@ -3147,7 +3150,7 @@ const CreditCardPage = () => {
 
       return () => clearTimeout(debounceTimer);
     }
-  }, [refreshTrigger]); // Removido loadData das dependências para evitar loop
+  }, [refreshTrigger]); // CORREÇÃO: Remover loadData para evitar loop quando creditCards.length muda
 
   // Cleanup: cancelar requisições pendentes quando o componente desmontar
   useEffect(() => {
@@ -3177,15 +3180,12 @@ const CreditCardPage = () => {
         {creditCards.length > 0 ? (
           <div className="cards-grid">
             {creditCards.map((card, index) => {
-              const currentBalance = calculateCurrentCardBalance(card.name); // Saldo já lançado
-              const committed = calculateCommittedCardBalance(card.name); // Parcelas futuras
-              const pendingAmount = calculatePendingCardExpenses(card.name); // A ser lançado
+              const expenses = calculateCardExpenses(card.name);
+              const committed = calculateCommittedBalance(card.name);
+              const usagePercentage = calculateUsagePercentage(expenses, card.limit);
+              const committedPercentage = card.limit > 0 ? (committed / card.limit) * 100 : 0;
+              const totalPercentage = Math.min(usagePercentage + committedPercentage, 100);
               
-              const currentPercentage = card.limit > 0 ? ((currentBalance || 0) / card.limit) * 100 : 0;
-              const committedPercentage = card.limit > 0 ? ((committed || 0) / card.limit) * 100 : 0;
-              const totalPercentage = Math.min(currentPercentage + committedPercentage, 100);
-              const availableLimit = Math.max(0, card.limit - currentBalance - committed);
-
               // Função para obter a bandeira do cartão baseada no nome
               const getCardFlag = (cardName) => {
                 if (!cardName) return 'CARTÃO';
@@ -3213,19 +3213,12 @@ const CreditCardPage = () => {
               return (
                 <div key={card._id} className="credit-card-simple">
                   <div 
-                    className={`card-content-simple ${getBrandClass(card.flag)}`}
+                    className={`card-content-simple ${getBrandClass(card.brand)}`}
                     onClick={() => openCardModal(card)}
-                    style={{ cursor: 'pointer' }}
                   >
                     <div className="card-header-simple">
                       <div className="card-name-header">
                         <h3 className="card-name-top">{card.name}</h3>
-                        {pendingAmount > 0 && (
-                          <div className="pending-indicator-dashboard">
-                            <span className="pending-label">A ser lançado</span>
-                            <span className="pending-value">R$ {pendingAmount.toFixed(2)}</span>
-                          </div>
-                        )}
                       </div>
                       <div className="card-actions" onClick={(e) => e.stopPropagation()}>
                         <button 
@@ -3254,22 +3247,22 @@ const CreditCardPage = () => {
                     <div className="card-financial-data">
                       <div className="financial-row">
                         <div className="financial-item">
-                          <span className="financial-label">Limite Total</span>
+                          <span className="financial-label">Limite</span>
                           <span className="financial-value">R$ {(card.limit || 0).toFixed(2)}</span>
                         </div>
                         <div className="financial-item">
-                          <span className="financial-label">💳 Gasto do Mês</span>
-                          <span className="financial-value expense">R$ {currentBalance.toFixed(2)}</span>
+                          <span className="financial-label">Gasto</span>
+                          <span className="financial-value expense">R$ {expenses.toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="financial-row">
                         <div className="financial-item">
-                          <span className="financial-label">⏳ Parcelas Futuras</span>
+                          <span className="financial-label">Comprometido</span>
                           <span className="financial-value committed">R$ {committed.toFixed(2)}</span>
                         </div>
                         <div className="financial-item">
-                          <span className="financial-label">✅ Disponível</span>
-                          <span className="financial-value available">R$ {availableLimit.toFixed(2)}</span>
+                          <span className="financial-label">Disponível</span>
+                          <span className="financial-value available">R$ {Math.max(0, (card.limit || 0) - expenses - committed).toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
@@ -3277,18 +3270,18 @@ const CreditCardPage = () => {
                     {card.limit > 0 && (
                       <div className="usage-bar-simple">
                         <div className="usage-info-simple">
-                          <span>💳 Gasto: {currentPercentage.toFixed(1)}% • ⏳ Parcelas: {committedPercentage.toFixed(1)}%</span>
+                          <span>Utilizado: {totalPercentage.toFixed(1)}%</span>
                         </div>
                         <div className="progress-bar-simple">
                           <div 
-                            className={`progress-fill-simple current ${currentPercentage > 80 ? 'danger' : currentPercentage > 60 ? 'warning' : 'normal'}`}
-                            style={{ width: `${currentPercentage}%` }}
+                            className={`progress-fill-simple current ${usagePercentage > 80 ? 'danger' : usagePercentage > 60 ? 'warning' : 'normal'}`}
+                            style={{ width: `${usagePercentage}%` }}
                           />
                           <div 
                             className="progress-fill-simple committed"
                             style={{ 
                               width: `${committedPercentage}%`,
-                              marginLeft: `${currentPercentage}%`
+                              marginLeft: `${usagePercentage}%`
                             }}
                           />
                         </div>
@@ -3297,11 +3290,11 @@ const CreditCardPage = () => {
 
                     <div className="card-footer-simple">
                       <div className="card-holder-info">
-                        <div className="card-number-simple">**** **** **** {card.lastDigits || '0000'}</div>
+                        <div className="card-number-simple">**** **** **** {card.lastDigits}</div>
                         <div className="card-holder-name">{card.holderName || 'PORTADOR'}</div>
                       </div>
                       <div className="card-brand-info">
-                        <span className="brand-name">{getCardFlag(card.flag)}</span>
+                        <span className="brand-name">{getCardFlag(card.name)}</span>
                       </div>
                     </div>
                   </div>
@@ -3411,25 +3404,23 @@ const CreditCardPage = () => {
                         return categoryIcons[category?.toLowerCase()] || (type === 'income' ? '💰' : '💳');
                       };
 
-                      // Verificar se a transação já foi lançada (CreditCardPage)
-                      const today = new Date();
-                      today.setHours(23, 59, 59, 999); // Fim do dia atual
-                      const transactionDate = new Date(transaction.date);
-                      transactionDate.setHours(0, 0, 0, 0); // Início do dia da transação
-                      const isLaunched = transactionDate <= today;
-
                       return (
-                        <div key={transaction._id || index} className={`transaction-item-extract ${!isLaunched ? 'future-transaction' : 'launched-transaction'}`}>
+                        <div key={transaction._id || index} className="transaction-item-extract">
                           <div className="extract-date">
                             {new Date(transaction.date).toLocaleDateString('pt-BR')}
-                            {!isLaunched && <span className="status-badge future">⏳ A SER LANÇADA</span>}
-                            {isLaunched && <span className="status-badge launched">✅ LANÇADA</span>}
                           </div>
                           <div className="extract-main">
                             <div className="extract-description">
                               <div className="description-line">
                                 <strong>{transaction.description}</strong>
-                                {renderCardTransactionBadges(transaction)}
+                                {transaction.isInstallment && (
+                                  <span className="installment-badge">
+                                    {transaction.installmentNumber}/{transaction.totalInstallments}
+                                  </span>
+                                )}
+                                {transaction.isFixed && (
+                                  <span className="fixed-badge">FIXA</span>
+                                )}
                               </div>
                               <div className="category-line">
                                 {getCategoryIcon(transaction.category, transaction.type)} {transaction.category}
@@ -3543,58 +3534,7 @@ const BanksPage = () => {
   const [selectedBank, setSelectedBank] = useState(null);
   const [bankToDelete, setBankToDelete] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-
-  // Função para renderizar badges das transações bancárias
-  const renderBankTransactionBadges = (transaction) => {
-    const badges = [];
-    
-    if (transaction.isInstallment) {
-      badges.push(
-        <span key="installment" className="installment-badge">
-          {transaction.installmentNumber}/{transaction.totalInstallments}
-        </span>
-      );
-    }
-    
-    if (transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) {
-      const isVirtual = transaction.isVirtualFixed || transaction.isVirtual;
-      badges.push(
-        <span key="fixed" className={isVirtual ? "virtual-fixed-badge" : "fixed-badge"}>
-          FIXA{isVirtual ? " (AUTO)" : ""}
-        </span>
-      );
-    }
-    
-    return badges;
-  };
-
-  // Função para renderizar badges das transações (igual ao Dashboard)
-  const renderTransactionBadges = (transaction) => {
-    const badges = [];
-    
-    // Badge de parcela
-    if (transaction.isInstallment) {
-      badges.push(
-        <span key="installment" className="installment-badge">
-          {transaction.installmentNumber}/{transaction.totalInstallments}
-        </span>
-      );
-    }
-    
-    // Badge de transação fixa/recorrente
-    if (transaction.isFixed || transaction.isRecurring || transaction.recurringParentId) {
-      const isVirtual = transaction.isVirtual;
-      badges.push(
-        <span key="fixed" className={isVirtual ? "virtual-fixed-badge" : "fixed-badge"}>
-          {isVirtual ? "FIXA (AUTO)" : "FIXA"}
-        </span>
-      );
-    }
-    
-    return badges;
-  };
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'debit_pix', 'credit'
   
   // Estados para o modal de transações do banco
   const [showBankModal, setShowBankModal] = useState(false);
@@ -3612,17 +3552,9 @@ const BanksPage = () => {
   const selectedMonthRef = useRef(selectedMonth);
   const selectedYearRef = useRef(selectedYear);
 
-  // Obter transações de um banco específico por mês com geração de recorrentes
+  // Obter transações de um banco específico por mês
   const getBankTransactionsByMonth = useCallback((bankName, month, year) => {
-    console.log('🔍 FILTRANDO TRANSAÇÕES BANCO (Página):', { bankName, month, year, totalTransactions: transactions?.length || 0 });
-    
-    if (!transactions || !Array.isArray(transactions)) {
-      console.log('❌ SEM TRANSAÇÕES DISPONÍVEIS');
-      return [];
-    }
-
-    // Primeiro, filtrar transações do mês específico
-    const monthTransactions = transactions.filter(t => {
+    return transactions.filter(t => {
       const transactionDate = new Date(t.date);
       const transactionMonth = transactionDate.getMonth();
       const transactionYear = transactionDate.getFullYear();
@@ -3637,54 +3569,7 @@ const BanksPage = () => {
                             t.recurringParentId;
       
       return isBankMatch && isDateMatch && isValidPayment;
-    });
-
-    console.log('🏦 Transações do banco encontradas:', monthTransactions.length);
-    
-    // Verificar quantas são recorrentes (geradas pelo backend)
-    const recurringCount = monthTransactions.filter(t => t.recurringParentId).length;
-    console.log('� Transações recorrentes (geradas):', recurringCount);
-
-    // Buscar templates recorrentes para este banco
-    const recurringTemplates = transactions.filter(transaction => {
-      return transaction.isRecurring && 
-             transaction.bank === bankName && 
-             (transaction.paymentMethod === 'debito' || transaction.paymentMethod === 'pix');
-    });
-
-    console.log('🔄 Templates recorrentes encontrados (Página Banco):', recurringTemplates.length);
-
-    // Para cada template, verificar se existe transação para o mês solicitado
-    recurringTemplates.forEach(template => {
-      const existingTransaction = monthTransactions.find(t => 
-        t.recurringParentId === template._id
-      );
-
-      if (!existingTransaction) {
-        console.log('🚀 Gerando transação recorrente virtual para banco (Página):', template.description);
-        
-        // Determinar o dia da transação no mês
-        const templateDate = new Date(template.date);
-        const targetDay = Math.min(template.recurringDay || templateDate.getDate(), new Date(year, month + 1, 0).getDate());
-        const virtualDate = new Date(year, month, targetDay, 12, 0, 0);
-
-        // Criar transação virtual
-        const virtualTransaction = {
-          ...template,
-          _id: `virtual-bank-page-${template._id}-${year}-${month + 1}`, // Mês em formato 1-12 para ID
-          date: virtualDate,
-          isRecurring: false,
-          isFixed: true,
-          recurringParentId: template._id,
-          isVirtual: true
-        };
-
-        monthTransactions.push(virtualTransaction);
-        console.log('✅ Transação virtual criada (Página Banco):', virtualTransaction.description, virtualDate.toISOString().split('T')[0]);
-      }
-    });
-
-    return monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [transactions]);
 
   // Abrir modal de transações do banco
@@ -3730,30 +3615,25 @@ const BanksPage = () => {
     const requestKey = `banks-${month}-${year}`;
     const currentParams = `${month}-${year}`;
     
-    // Se já está carregando os MESMOS dados, não fazer nada (exceto se for primeiro carregamento)
-    const isFirstLoad = lastLoadParamsRef.current === null;
-    if (loadingRef.current === requestKey && !isFirstLoad) {
+    // Se já está carregando os MESMOS dados, não fazer nada
+    if (loadingRef.current === requestKey) {
+      console.log('🔄 Já carregando bancos para este período, ignorando...');
       return;
     }
-    
-    // Cache inteligente: só bloquear se realmente já carregou dados com sucesso para os mesmos parâmetros
-    const shouldSkipDueToCache = !forceReload && 
-                                lastLoadParamsRef.current === currentParams && 
-                                banks.length > 0;
-    
-    if (shouldSkipDueToCache) {
-      console.log(`⚠️ Cache hit: Dados já carregados para ${currentParams} (${banks.length} bancos). Use forceReload=true para recarregar`);
-      return;
-    }
-    
-    // Log detalhado para debug
-    console.log(`🔍 Cache check: forceReload=${forceReload}, lastParams="${lastLoadParamsRef.current}", currentParams="${currentParams}", bancos=${banks.length}`);
-    console.log(`📊 Decisão: ${shouldSkipDueToCache ? 'SKIP (cache)' : 'LOAD (novo/force)'}`);
     
     // Cancelar apenas se for requisição DIFERENTE
     if (abortControllerRef.current && loadingRef.current && loadingRef.current !== requestKey) {
+      console.log('⏹️ Cancelando requisição anterior (nova solicitação)');
       abortControllerRef.current.abort();
     }
+    
+    // Cache apenas se for EXATAMENTE os mesmos parâmetros e não for reload forçado
+    if (!forceReload && lastLoadParamsRef.current === currentParams && loadingRef.current !== requestKey) {
+      console.log('📋 Dados já carregados para este período, usando cache');
+      return;
+    }
+    
+    console.log(`🚀 Iniciando carregamento: ${requestKey}, forceReload=${forceReload}`);
     
     loadingRef.current = requestKey;
     abortControllerRef.current = new AbortController();
@@ -3770,28 +3650,16 @@ const BanksPage = () => {
         return dateB - dateA;
       });
 
-      // Carregar TODAS as transações (igual ao Dashboard)
-      // Isso garante que templates recorrentes (isRecurring: true) sejam incluídos
-      const transactionsResponse = await axios.get('/transactions', {
-        signal: abortControllerRef.current.signal,
-        timeout: 10000
+      // Carregar transações para calcular saldos
+      const transactionsResponse = await axios.get(`/transactions?month=${month}&year=${year}`, {
+        signal: abortControllerRef.current.signal
       });
-      
-      const allTransactions = transactionsResponse.data || [];
-      
-      // DEBUG: Verificar transações recorrentes carregadas
-      const recurringTransactions = allTransactions.filter(t => t.isRecurring);
-      const generatedRecurringTransactions = allTransactions.filter(t => t.recurringParentId);
-      
-      console.log(`🏦 BanksPage - Mês/Ano: ${month}/${year}`);
-      console.log(`🏦 BanksPage - Total transações carregadas: ${allTransactions.length}`);
-      console.log(`🏦 BanksPage - Templates recorrentes: ${recurringTransactions.length}`);
-      console.log(`🏦 BanksPage - Transações geradas (recurringParentId): ${generatedRecurringTransactions.length}`);
       
       // Processar apenas se ainda é a requisição ativa
       if (loadingRef.current === requestKey) {
+        console.log(`✅ Bancos carregados: ${sortedBanks.length} bancos, ${transactionsResponse.data?.length || 0} transações`);
         setBanks(sortedBanks);
-        setTransactions(allTransactions);
+        setTransactions(transactionsResponse.data || []);
         
         // Atualizar parâmetros apenas se diferentes
         if (month !== selectedMonth) setSelectedMonth(month);
@@ -3799,6 +3667,7 @@ const BanksPage = () => {
         
         // Marcar como carregado com sucesso
         lastLoadParamsRef.current = currentParams;
+        console.log(`📋 Estado atualizado para: ${currentParams}`);
       } else {
         console.log(`⚠️ Requisição não é mais ativa: ${requestKey} vs ${loadingRef.current}`);
       }
@@ -3826,21 +3695,24 @@ const BanksPage = () => {
         loadingRef.current = null;
       }
     }
-  }, [selectedMonth, selectedYear]); // REMOVIDO isLoadingData das dependências
+  }, [selectedMonth, selectedYear]); // DEPENDÊNCIAS CORRETAS
 
   const handleMonthChange = useCallback((month, year) => {
     // Verificar se é diferente dos valores atuais
     if (month !== selectedMonth || year !== selectedYear) {
       setSelectedMonth(month);
       setSelectedYear(year);
-      loadData(month, year);
+      loadData(month, year, true); // forceReload = true para mudança de mês
     }
   }, [selectedMonth, selectedYear, loadData]);
 
   // Calcular saldo de um banco baseado nas transações do mês selecionado
   const calculateBankBalance = useCallback((bankName) => {
-    // Usar getBankTransactionsByMonth para pegar apenas transações do mês selecionado
-    const bankTransactions = getBankTransactionsByMonth(bankName, selectedMonth - 1, selectedYear);
+    // Filtrar transações do banco para o mês/ano selecionado
+    const bankTransactions = transactions.filter(t => 
+      t.bank === bankName && 
+      (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+    );
     
     return bankTransactions.reduce((sum, t) => {
       if (t.type === 'income') {
@@ -3849,19 +3721,25 @@ const BanksPage = () => {
         return sum - (t.amount || 0);
       }
     }, 0);
-  }, [transactions, selectedMonth, selectedYear]);
+  }, [transactions]);
 
   // Calcular receitas do banco no período selecionado
   const calculateBankIncome = useCallback((bankName) => {
-    const bankTransactions = getBankTransactionsByMonth(bankName, selectedMonth - 1, selectedYear);
-    return bankTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions, selectedMonth, selectedYear]);
+    return transactions.filter(t => 
+      t.bank === bankName && 
+      t.type === 'income' && 
+      (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+    ).reduce((sum, t) => sum + (t.amount || 0), 0);
+  }, [transactions]);
 
   // Calcular despesas do banco no período selecionado
   const calculateBankExpenses = useCallback((bankName) => {
-    const bankTransactions = getBankTransactionsByMonth(bankName, selectedMonth - 1, selectedYear);
-    return bankTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + (t.amount || 0), 0);
-  }, [transactions, selectedMonth, selectedYear]);
+    return transactions.filter(t => 
+      t.bank === bankName && 
+      t.type === 'expense' && 
+      (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+    ).reduce((sum, t) => sum + (t.amount || 0), 0);
+  }, [transactions]);
 
   // Adicionar novo banco
   const handleAddBank = async (bankData) => {
@@ -3944,14 +3822,11 @@ const BanksPage = () => {
   // Deletar banco
   const handleDeleteBank = async () => {
     try {
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
-      
       const bankTransactions = transactions.filter(t => {
         if (t.bank !== bankToDelete.name) return false;
         const transactionDate = new Date(t.date);
-        return transactionDate.getMonth() + 1 === currentMonth && 
-               transactionDate.getFullYear() === currentYear;
+        return transactionDate.getMonth() + 1 === selectedMonth && 
+               transactionDate.getFullYear() === selectedYear;
       });
       
       if (bankTransactions.length > 0) {
@@ -4056,8 +3931,10 @@ const BanksPage = () => {
           <div className="cards-grid">
             {banks.map((bank) => {
               const balance = calculateBankBalance(bank.name);
-              const monthTransactions = getBankTransactionsByMonth(bank.name, selectedMonth - 1, selectedYear);
-              const transactionCount = monthTransactions.length;
+              const transactionCount = transactions.filter(t => 
+                t.bank === bank.name && 
+                (t.paymentMethod === 'debito' || t.paymentMethod === 'pix')
+              ).length;
               const incomeThisMonth = calculateBankIncome(bank.name);
               const expenseThisMonth = calculateBankExpenses(bank.name);
               
@@ -4253,25 +4130,23 @@ const BanksPage = () => {
                         return categoryIcons[category?.toLowerCase()] || (type === 'income' ? '💰' : '💳');
                       };
 
-                      // Verificar se a transação já foi lançada (BanksPage)
-                      const today = new Date();
-                      today.setHours(23, 59, 59, 999);
-                      const transactionDate = new Date(transaction.date);
-                      transactionDate.setHours(0, 0, 0, 0);
-                      const isLaunched = transactionDate <= today;
-
                       return (
-                        <div key={transaction._id || index} className={`transaction-item-extract ${!isLaunched ? 'future-transaction' : 'launched-transaction'}`}>
+                        <div key={transaction._id || index} className="transaction-item-extract">
                           <div className="extract-date">
                             {new Date(transaction.date).toLocaleDateString('pt-BR')}
-                            {!isLaunched && <span className="status-badge future">⏳ A SER LANÇADA</span>}
-                            {isLaunched && <span className="status-badge launched">✅ LANÇADA</span>}
                           </div>
                           <div className="extract-main">
                             <div className="extract-description">
                               <div className="description-line">
                                 <strong>{transaction.description}</strong>
-                                {renderBankTransactionBadges(transaction)}
+                                {transaction.isInstallment && (
+                                  <span className="installment-badge">
+                                    {transaction.installmentNumber}/{transaction.totalInstallments}
+                                  </span>
+                                )}
+                                {transaction.isFixed && (
+                                  <span className="fixed-badge">FIXA</span>
+                                )}
                               </div>
                               <div className="category-line">
                                 {getCategoryIcon(transaction.category, transaction.type)} {transaction.category}

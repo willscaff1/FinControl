@@ -1574,6 +1574,36 @@
 .card-name-header {
   display: flex;
   align-items: flex-start; /* Alinhamento no topo */
+  justify-content: space-between; /* Espaçar nome e indicador */
+  width: 100%;
+}
+
+.pending-indicator-dashboard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 0.75rem;
+  color: #ff9500;
+  text-align: right;
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(255, 149, 0, 0.1);
+  padding: 4px 8px;
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 149, 0, 0.2);
+}
+
+.pending-indicator-dashboard .pending-label {
+  font-weight: 500;
+  margin-bottom: 2px;
+  opacity: 0.9;
+}
+
+.pending-indicator-dashboard .pending-value {
+  font-weight: 700;
+  font-size: 0.8rem;
 }
 
 .card-name-top {
@@ -1588,6 +1618,37 @@
   position: absolute; /* Posicionamento absoluto para controle total */
   top: 0; /* BEM no topo */
   left: 0; /* BEM à esquerda */
+}
+
+/* Indicador de valores pendentes */
+.pending-indicator {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: rgba(255, 159, 67, 0.95);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(255, 159, 67, 0.3);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  animation: pulse-orange 2s infinite;
+}
+
+.pending-label {
+  display: block;
+  font-size: 0.6rem;
+  opacity: 0.9;
+  margin-bottom: 1px;
+}
+
+.pending-value {
+  display: block;
+  font-weight: 700;
+  font-size: 0.7rem;
 }
 
 .card-actions {
@@ -2271,6 +2332,36 @@
 
 .fixed-badge {
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+/* Badge para transações virtuais (geradas automaticamente) */
+.virtual-fixed-badge {
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: white;
+  padding: 0.15rem 0.4rem;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.virtual-fixed-badge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 100%; }
 }
 
 /* Responsividade para extrato */
@@ -4826,4 +4917,322 @@
   .banks-grid {
     gap: 2rem;
   }
+}
+
+/* 🏦 ESTILOS ESPECÍFICOS PARA MODAIS DE BANCO */
+
+/* Modal de confirmação de exclusão */
+.delete-confirmation-content {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.warning-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+.delete-message {
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+  color: #333;
+  font-weight: 500;
+}
+
+.bank-preview-delete {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border: 2px solid #dee2e6;
+  border-radius: 12px;
+  padding: 1rem;
+  margin: 1rem 0;
+  display: inline-block;
+  min-width: 250px;
+}
+
+.bank-info-delete {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.bank-icon-delete {
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.bank-details-delete {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+}
+
+.bank-name-delete {
+  font-size: 1.1rem;
+  color: #333;
+  font-weight: 600;
+}
+
+.bank-type-delete {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.holder-name-delete {
+  font-size: 0.85rem;
+  color: #888;
+  font-style: italic;
+}
+
+.warning-text {
+  margin-top: 1.5rem;
+  padding: 0.75rem;
+  background: rgba(252, 165, 165, 0.1);
+  border: 1px solid rgba(252, 165, 165, 0.3);
+  border-radius: 8px;
+}
+
+.warning-text small {
+  color: #dc2626;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Botão de perigo aprimorado */
+.btn-danger {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+  font-size: 0.95rem;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%);
+  box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
+  transform: translateY(-2px);
+}
+
+.btn-danger:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+}
+
+/* Estilos específicos para preview de transação no modal de exclusão */
+.transaction-preview-delete {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+}
+
+.transaction-info-delete {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.transaction-icon-delete {
+  font-size: 1.5rem;
+  background: white;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.transaction-details-delete {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.transaction-name-delete {
+  color: #1f2937;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.transaction-amount-delete {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.transaction-amount-delete.income {
+  color: #059669;
+}
+
+.transaction-amount-delete.expense {
+  color: #dc2626;
+}
+
+.transaction-date-delete {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+/* 🔍 Estilos para filtro de transações */
+.payment-filter-container {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  border: 1px solid #e5e7eb;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.filter-group label {
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.95rem;
+}
+
+.filter-select {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  outline: none;
+  min-width: 160px;
+}
+
+.filter-select:hover {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+}
+
+.filter-select:focus {
+  border-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+@media (max-width: 640px) {
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  
+  .filter-select {
+    min-width: 100%;
+  }
+}
+
+/* 💳 Estilos para indicadores de transações lançadas/futuras */
+.future-transaction {
+  opacity: 0.8;
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.05) 0%, rgba(245, 158, 11, 0.1) 100%);
+}
+
+.launched-transaction {
+  border-left: 4px solid #10b981;
+}
+
+.status-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+  margin-left: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.status-badge.future {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: white;
+  animation: pulse-orange 2s infinite;
+}
+
+.status-badge.launched {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+@keyframes pulse-orange {
+  0%, 100% { 
+    opacity: 1; 
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.8; 
+    transform: scale(1.02);
+  }
+}
+
+.future-badge, .launched-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-left: 8px;
+  text-transform: uppercase;
+}
+
+.future-badge {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+.launched-badge {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Estilos para badges comprometido no Dashboard */
+.financial-value.committed {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.financial-value.available {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.modal-stat-value.committed {
+  color: #f59e0b;
+  font-weight: 600;
 }
