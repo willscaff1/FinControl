@@ -699,7 +699,7 @@ const DashboardPage = () => {
       return [];
     }
 
-    // Primeiro, filtrar transações do mês específico
+    // Filtrar apenas transações reais do mês e cartão
     const monthTransactions = transactions.filter(transaction => {
       if (!transaction.date) return false;
       
@@ -714,75 +714,7 @@ const DashboardPage = () => {
       return isCorrectMonth && isCorrectCard && isCorrectType;
     });
 
-    // Buscar templates recorrentes para este cartão
-    const recurringTemplates = transactions.filter(transaction => {
-      return transaction.isRecurring && 
-             transaction.creditCard === cardName && 
-             transaction.paymentMethod === 'credito';
-    });
-
-    console.log('🔄 Templates recorrentes encontrados:', recurringTemplates.length);
-
-    // Para cada template, verificar se existe transação para o mês solicitado
-    recurringTemplates.forEach(template => {
-      const existingTransaction = monthTransactions.find(t => 
-        t.recurringParentId === template._id
-      );
-
-      if (!existingTransaction) {
-        console.log('🚀 Gerando transação recorrente virtual para:', template.description);
-        
-        // Determinar o dia da transação no mês
-        const templateDate = new Date(template.date);
-        const targetDay = Math.min(template.recurringDay || templateDate.getDate(), new Date(year, month + 1, 0).getDate());
-        const virtualDate = new Date(year, month, targetDay, 12, 0, 0);
-
-        // Criar transação virtual
-        const virtualTransaction = {
-          ...template,
-          _id: `virtual-${template._id}-${year}-${month + 1}`, // Converter para mês 1-12 para ID
-          date: virtualDate,
-          isRecurring: false,
-          isFixed: true,
-          recurringParentId: template._id,
-          isVirtual: true
-        };
-
-        monthTransactions.push(virtualTransaction);
-        console.log('✅ Transação virtual criada:', virtualTransaction.description, virtualDate.toISOString().split('T')[0]);
-      }
-    });
-    
-    console.log('✅ TRANSAÇÕES FINAIS:', monthTransactions.length, monthTransactions);
-    
-    // Buscar transações parceladas (installments) para este cartão
-    const installmentTransactions = transactions.filter(t => {
-      return t.isInstallment && 
-             t.creditCard === cardName && 
-             t.paymentMethod === 'credito' &&
-             t.parentTransactionId; // Só pegar parcelamentos filhos
-    });
-
-    console.log('💳 Parcelamentos encontrados (Dashboard Cartão):', installmentTransactions.length);
-
-    // Para cada parcelamento, verificar se deve aparecer no mês solicitado
-    installmentTransactions.forEach(installment => {
-      const installmentDate = new Date(installment.date);
-      const installmentMonth = installmentDate.getMonth();
-      const installmentYear = installmentDate.getFullYear();
-      
-      // Verificar se esta parcela pertence ao mês solicitado
-      if (installmentMonth === month && installmentYear === year) {
-        // Verificar se já não foi adicionada
-        const existingInstallment = monthTransactions.find(t => t._id === installment._id);
-        if (!existingInstallment) {
-          monthTransactions.push(installment);
-          console.log('✅ Parcelamento adicionado (Dashboard Cartão):', installment.description, 
-                     `${installment.installmentNumber}/${installment.totalInstallments}`);
-        }
-      }
-    });
-    
+    console.log('� Transações encontradas para', cardName, ':', monthTransactions.length);
     return monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
@@ -886,7 +818,7 @@ const DashboardPage = () => {
       return [];
     }
 
-    // Primeiro, filtrar transações do mês específico
+    // Filtrar apenas transações reais do mês e banco
     const monthTransactions = transactions.filter(t => {
       const transactionDate = new Date(t.date);
       const transactionMonth = transactionDate.getMonth();
@@ -896,81 +828,13 @@ const DashboardPage = () => {
       const isBankMatch = t.bank === bankName;
       const isDateMatch = transactionMonth === month && transactionYear === year;
       
-      // Verificar se é método de pagamento válido para banco (débito, PIX) OU se é transação recorrente/fixa
-      const isValidPayment = (t.paymentMethod === 'debito' || t.paymentMethod === 'pix') || 
-                            t.isRecurring || 
-                            t.recurringParentId;
+      // Verificar se é método de pagamento válido para banco (débito, PIX)
+      const isValidPayment = (t.paymentMethod === 'debito' || t.paymentMethod === 'pix');
       
       return isBankMatch && isDateMatch && isValidPayment;
     });
 
-    // Buscar templates recorrentes para este banco
-    const recurringTemplates = transactions.filter(transaction => {
-      return transaction.isRecurring && 
-             transaction.bank === bankName && 
-             (transaction.paymentMethod === 'debito' || transaction.paymentMethod === 'pix');
-    });
-
-    console.log('🔄 Templates recorrentes encontrados (Banco):', recurringTemplates.length);
-
-    // Para cada template, verificar se existe transação para o mês solicitado
-    recurringTemplates.forEach(template => {
-      const existingTransaction = monthTransactions.find(t => 
-        t.recurringParentId === template._id
-      );
-
-      if (!existingTransaction) {
-        console.log('🚀 Gerando transação recorrente virtual para banco:', template.description);
-        
-        // Determinar o dia da transação no mês
-        const templateDate = new Date(template.date);
-        const targetDay = Math.min(template.recurringDay || templateDate.getDate(), new Date(year, month + 1, 0).getDate());
-        const virtualDate = new Date(year, month, targetDay, 12, 0, 0);
-
-        // Criar transação virtual
-        const virtualTransaction = {
-          ...template,
-          _id: `virtual-bank-${template._id}-${year}-${month + 1}`, // Mês em formato 1-12 para ID
-          date: virtualDate,
-          isRecurring: false,
-          isFixed: true,
-          recurringParentId: template._id,
-          isVirtual: true
-        };
-
-        monthTransactions.push(virtualTransaction);
-        console.log('✅ Transação virtual criada (Banco):', virtualTransaction.description, virtualDate.toISOString().split('T')[0]);
-      }
-    });
-
-    // Buscar transações parceladas (installments) para este banco
-    const installmentTransactions = transactions.filter(t => {
-      return t.isInstallment && 
-             t.bank === bankName && 
-             (t.paymentMethod === 'debito' || t.paymentMethod === 'pix') &&
-             t.parentTransactionId; // Só pegar parcelamentos filhos
-    });
-
-    console.log('💳 Parcelamentos encontrados (Dashboard Banco):', installmentTransactions.length);
-
-    // Para cada parcelamento, verificar se deve aparecer no mês solicitado
-    installmentTransactions.forEach(installment => {
-      const installmentDate = new Date(installment.date);
-      const installmentMonth = installmentDate.getMonth();
-      const installmentYear = installmentDate.getFullYear();
-      
-      // Verificar se esta parcela pertence ao mês solicitado
-      if (installmentMonth === month && installmentYear === year) {
-        // Verificar se já não foi adicionada
-        const existingInstallment = monthTransactions.find(t => t._id === installment._id);
-        if (!existingInstallment) {
-          monthTransactions.push(installment);
-          console.log('✅ Parcelamento adicionado (Dashboard Banco):', installment.description, 
-                     `${installment.installmentNumber}/${installment.totalInstallments}`);
-        }
-      }
-    });
-
+    console.log('🏦 Transações encontradas para', bankName, ':', monthTransactions.length);
     return monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
@@ -2232,14 +2096,14 @@ const AllTransactionsPage = () => {
     setIsLoadingData(true);
     
     try {
-      const response = await axios.get(`/transactions`, {
+      const response = await axios.get(`/transactions?month=${month}&year=${year}`, {
         signal: abortControllerRef.current.signal
       });
       
       // Processar apenas se ainda é a requisição ativa
       if (loadingRef.current === requestKey) {
-        const allTransactions = response.data || [];
-        setTransactions(allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)));
+        const monthTransactions = response.data || [];
+        setTransactions(monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)));
         lastLoadParamsRef.current = currentParams;
       }
       
@@ -3612,7 +3476,7 @@ const BanksPage = () => {
   const selectedMonthRef = useRef(selectedMonth);
   const selectedYearRef = useRef(selectedYear);
 
-  // Obter transações de um banco específico por mês com geração de recorrentes
+  // Obter transações de um banco específico por mês 
   const getBankTransactionsByMonth = useCallback((bankName, month, year) => {
     console.log('🔍 FILTRANDO TRANSAÇÕES BANCO (Página):', { bankName, month, year, totalTransactions: transactions?.length || 0 });
     
@@ -3621,7 +3485,7 @@ const BanksPage = () => {
       return [];
     }
 
-    // Primeiro, filtrar transações do mês específico
+    // Filtrar apenas transações reais do mês e banco
     const monthTransactions = transactions.filter(t => {
       const transactionDate = new Date(t.date);
       const transactionMonth = transactionDate.getMonth();
@@ -3631,59 +3495,13 @@ const BanksPage = () => {
       const isBankMatch = t.bank === bankName;
       const isDateMatch = transactionMonth === month && transactionYear === year;
       
-      // Verificar se é método de pagamento válido para banco (débito, PIX) OU se é transação recorrente/fixa
-      const isValidPayment = (t.paymentMethod === 'debito' || t.paymentMethod === 'pix') || 
-                            t.isRecurring || 
-                            t.recurringParentId;
+      // Verificar se é método de pagamento válido para banco (débito, PIX)
+      const isValidPayment = (t.paymentMethod === 'debito' || t.paymentMethod === 'pix');
       
       return isBankMatch && isDateMatch && isValidPayment;
     });
 
-    console.log('🏦 Transações do banco encontradas:', monthTransactions.length);
-    
-    // Verificar quantas são recorrentes (geradas pelo backend)
-    const recurringCount = monthTransactions.filter(t => t.recurringParentId).length;
-    console.log('� Transações recorrentes (geradas):', recurringCount);
-
-    // Buscar templates recorrentes para este banco
-    const recurringTemplates = transactions.filter(transaction => {
-      return transaction.isRecurring && 
-             transaction.bank === bankName && 
-             (transaction.paymentMethod === 'debito' || transaction.paymentMethod === 'pix');
-    });
-
-    console.log('🔄 Templates recorrentes encontrados (Página Banco):', recurringTemplates.length);
-
-    // Para cada template, verificar se existe transação para o mês solicitado
-    recurringTemplates.forEach(template => {
-      const existingTransaction = monthTransactions.find(t => 
-        t.recurringParentId === template._id
-      );
-
-      if (!existingTransaction) {
-        console.log('🚀 Gerando transação recorrente virtual para banco (Página):', template.description);
-        
-        // Determinar o dia da transação no mês
-        const templateDate = new Date(template.date);
-        const targetDay = Math.min(template.recurringDay || templateDate.getDate(), new Date(year, month + 1, 0).getDate());
-        const virtualDate = new Date(year, month, targetDay, 12, 0, 0);
-
-        // Criar transação virtual
-        const virtualTransaction = {
-          ...template,
-          _id: `virtual-bank-page-${template._id}-${year}-${month + 1}`, // Mês em formato 1-12 para ID
-          date: virtualDate,
-          isRecurring: false,
-          isFixed: true,
-          recurringParentId: template._id,
-          isVirtual: true
-        };
-
-        monthTransactions.push(virtualTransaction);
-        console.log('✅ Transação virtual criada (Página Banco):', virtualTransaction.description, virtualDate.toISOString().split('T')[0]);
-      }
-    });
-
+    console.log('🏦 Transações encontradas para', bankName, ':', monthTransactions.length);
     return monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [transactions]);
 
@@ -3770,21 +3588,21 @@ const BanksPage = () => {
         return dateB - dateA;
       });
 
-      // Carregar TODAS as transações (igual ao Dashboard)
-      // Isso garante que templates recorrentes (isRecurring: true) sejam incluídos
-      const transactionsResponse = await axios.get('/transactions', {
+      // Carregar apenas transações do mês (sem templates separados)
+      // O backend já gera as transações recorrentes automaticamente
+      const transactionsResponse = await axios.get(`/transactions?month=${month}&year=${year}`, {
         signal: abortControllerRef.current.signal,
         timeout: 10000
       });
       
       const allTransactions = transactionsResponse.data || [];
       
-      // DEBUG: Verificar transações recorrentes carregadas
+      // DEBUG: Verificar transações carregadas
       const recurringTransactions = allTransactions.filter(t => t.isRecurring);
       const generatedRecurringTransactions = allTransactions.filter(t => t.recurringParentId);
       
       console.log(`🏦 BanksPage - Mês/Ano: ${month}/${year}`);
-      console.log(`🏦 BanksPage - Total transações carregadas: ${allTransactions.length}`);
+      console.log(`🏦 BanksPage - Transações do mês: ${allTransactions.length}`);
       console.log(`🏦 BanksPage - Templates recorrentes: ${recurringTransactions.length}`);
       console.log(`🏦 BanksPage - Transações geradas (recurringParentId): ${generatedRecurringTransactions.length}`);
       
