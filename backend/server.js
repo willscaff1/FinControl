@@ -11,6 +11,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Middleware para mapear rotas sem /api para /api
+app.use('/transactions', (req, res, next) => {
+  req.url = '/api' + req.url;
+  next();
+});
+
+app.use('/credit-cards', (req, res, next) => {
+  req.url = '/api' + req.url;
+  next();
+});
+
+app.use('/banks', (req, res, next) => {
+  req.url = '/api' + req.url;
+  next();
+});
+
 // MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB conectado'))
@@ -401,14 +417,20 @@ app.get('/api/transactions', auth, async (req, res) => {
     const { month, year } = req.query;
     let query = { userId: req.user._id };
     
+    console.log(`🔍 [BACKEND DEBUG] GET /api/transactions - Parâmetros:`, { month, year });
+    
     // Se mês e ano forem fornecidos, filtrar por período
     if (month && year) {
       const startDate = new Date(year, month - 1, 1); // Primeiro dia do mês
       const endDate = new Date(year, month, 0, 23, 59, 59, 999); // Último dia do mês
+      
+      // Query para buscar APENAS transações do mês (excluindo templates)
       query.date = { $gte: startDate, $lte: endDate };
       query.isRecurring = { $ne: true }; // Excluir os templates de transações fixas da lista
       
-      // Só gerar transações recorrentes se ainda não existirem para o mês
+      console.log(`🔍 [BACKEND DEBUG] Query para transações do mês:`, query);
+      
+      // Verificar se precisa gerar transações recorrentes
       const existingRecurringCount = await Transaction.countDocuments({
         userId: req.user._id,
         date: { $gte: startDate, $lte: endDate },
@@ -420,18 +442,40 @@ app.get('/api/transactions', auth, async (req, res) => {
         isRecurring: true
       });
       
+      console.log(`🔍 [BACKEND DEBUG] Existing recurring: ${existingRecurringCount}, Templates: ${recurringTemplatesCount}`);
+      
       // Se não há transações recorrentes para o mês, mas há templates, gerar
       if (existingRecurringCount === 0 && recurringTemplatesCount > 0) {
-        console.log(`🔄 Gerando transações recorrentes para ${month}/${year} - Templates: ${recurringTemplatesCount}`);
+        console.log(`🔄 [BACKEND DEBUG] Gerando transações recorrentes para ${month}/${year}`);
         await generateRecurringTransactions(req.user._id, parseInt(month), parseInt(year));
       }
     } else {
-      query.isRecurring = { $ne: true }; // Sempre excluir templates
+      // Buscar todas as transações, excluindo apenas templates
+      query.isRecurring = { $ne: true };
+      console.log(`🔍 [BACKEND DEBUG] Query para todas as transações:`, query);
     }
     
     const transactions = await Transaction.find(query).sort({ date: -1 });
+    
+    console.log(`🔍 [BACKEND DEBUG] Transações encontradas: ${transactions.length}`);
+    
+    // Debug das transações encontradas
+    const templateCount = transactions.filter(t => t.isRecurring).length;
+    const generatedCount = transactions.filter(t => t.recurringParentId).length;
+    const normalCount = transactions.filter(t => !t.isRecurring && !t.recurringParentId).length;
+    
+    console.log(`🔍 [BACKEND DEBUG] Breakdown: Templates: ${templateCount}, Geradas: ${generatedCount}, Normais: ${normalCount}`);
+    
+    // Verificar duplicatas por descrição
+    const descriptions = transactions.map(t => t.description);
+    const duplicates = descriptions.filter((desc, index) => descriptions.indexOf(desc) !== index);
+    if (duplicates.length > 0) {
+      console.log(`⚠️ [BACKEND DEBUG] DUPLICATAS ENCONTRADAS:`, [...new Set(duplicates)]);
+    }
+    
     res.json(transactions);
   } catch (error) {
+    console.error(`❌ [BACKEND DEBUG] Erro:`, error);
     res.status(500).json({ error: error.message });
   }
 });
