@@ -2096,6 +2096,10 @@ const AllTransactionsPage = () => {
     setIsLoadingData(true);
     
     try {
+      console.log('🔍 [ALL TRANSACTIONS DEBUG] Carregando transações...');
+      console.log('🔍 [ALL TRANSACTIONS DEBUG] Parâmetros:', { month, year });
+      console.log('🔍 [ALL TRANSACTIONS DEBUG] URL da API:', `/transactions?month=${month}&year=${year}`);
+      
       const response = await axios.get(`/transactions?month=${month}&year=${year}`, {
         signal: abortControllerRef.current.signal
       });
@@ -2103,8 +2107,39 @@ const AllTransactionsPage = () => {
       // Processar apenas se ainda é a requisição ativa
       if (loadingRef.current === requestKey) {
         const monthTransactions = response.data || [];
+        
+        console.log('🔍 [ALL TRANSACTIONS DEBUG] Resposta da API:');
+        console.log('🔍 [ALL TRANSACTIONS DEBUG] Total de transações recebidas:', monthTransactions.length);
+        
+        // Debug detalhado das transações
+        console.log('🔍 [ALL TRANSACTIONS DEBUG] Breakdown das transações:');
+        const recurringTemplates = monthTransactions.filter(t => t.isRecurring);
+        const generatedRecurring = monthTransactions.filter(t => t.recurringParentId);
+        const normalTransactions = monthTransactions.filter(t => !t.isRecurring && !t.recurringParentId);
+        
+        console.log(`🔍 [ALL TRANSACTIONS DEBUG] - Templates recorrentes (isRecurring): ${recurringTemplates.length}`);
+        console.log(`🔍 [ALL TRANSACTIONS DEBUG] - Transações geradas (recurringParentId): ${generatedRecurring.length}`);
+        console.log(`🔍 [ALL TRANSACTIONS DEBUG] - Transações normais: ${normalTransactions.length}`);
+        
+        if (recurringTemplates.length > 0) {
+          console.log('🔍 [ALL TRANSACTIONS DEBUG] Templates encontrados:', recurringTemplates.map(t => t.description));
+        }
+        
+        if (generatedRecurring.length > 0) {
+          console.log('🔍 [ALL TRANSACTIONS DEBUG] Recorrentes geradas:', generatedRecurring.map(t => `${t.description} (parent: ${t.recurringParentId})`));
+        }
+        
+        // Verificar duplicatas por descrição
+        const descriptions = monthTransactions.map(t => t.description);
+        const duplicates = descriptions.filter((desc, index) => descriptions.indexOf(desc) !== index);
+        if (duplicates.length > 0) {
+          console.log('⚠️ [ALL TRANSACTIONS DEBUG] DUPLICATAS ENCONTRADAS:', [...new Set(duplicates)]);
+        }
+        
         setTransactions(monthTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)));
         lastLoadParamsRef.current = currentParams;
+        
+        console.log('✅ [ALL TRANSACTIONS DEBUG] Transações carregadas e ordenadas com sucesso');
       }
       
     } catch (error) {
@@ -2230,14 +2265,38 @@ const AllTransactionsPage = () => {
 
   // Função para filtrar transações por tipo de pagamento
   const getFilteredTransactions = () => {
+    console.log('🔍 [ALL TRANSACTIONS FILTER DEBUG] Aplicando filtro...');
+    console.log('🔍 [ALL TRANSACTIONS FILTER DEBUG] Filtro atual:', paymentFilter);
+    console.log('🔍 [ALL TRANSACTIONS FILTER DEBUG] Total de transações antes do filtro:', transactions.length);
+    
+    let filtered;
     if (paymentFilter === 'all') {
-      return transactions;
+      filtered = transactions;
     } else if (paymentFilter === 'debit_pix') {
-      return transactions.filter(t => t.paymentMethod === 'debito' || t.paymentMethod === 'pix');
+      filtered = transactions.filter(t => t.paymentMethod === 'debito' || t.paymentMethod === 'pix');
     } else if (paymentFilter === 'credit') {
-      return transactions.filter(t => t.paymentMethod === 'credito');
+      filtered = transactions.filter(t => t.paymentMethod === 'credito');
+    } else {
+      filtered = transactions;
     }
-    return transactions;
+    
+    console.log('🔍 [ALL TRANSACTIONS FILTER DEBUG] Transações após filtro:', filtered.length);
+    
+    // Debug das transações filtradas
+    const groupedByDescription = filtered.reduce((acc, t) => {
+      acc[t.description] = (acc[t.description] || 0) + 1;
+      return acc;
+    }, {});
+    
+    const duplicatedDescriptions = Object.entries(groupedByDescription)
+      .filter(([_, count]) => count > 1)
+      .map(([desc, count]) => `${desc} (${count}x)`);
+    
+    if (duplicatedDescriptions.length > 0) {
+      console.log('⚠️ [ALL TRANSACTIONS FILTER DEBUG] DUPLICATAS NA EXIBIÇÃO:', duplicatedDescriptions);
+    }
+    
+    return filtered;
   };
 
   if (loading) {
