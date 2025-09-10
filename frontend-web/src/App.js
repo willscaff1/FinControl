@@ -2062,10 +2062,61 @@ const AllTransactionsPage = () => {
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showPayBillModal, setShowPayBillModal] = useState(false);
+  const [showAdvanceBillModal, setShowAdvanceBillModal] = useState(false);
   const [showConfirmDeleteAllModal, setShowConfirmDeleteAllModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [transactionToDelete, setTransactionToDelete] = useState(null);
+  const [billToPay, setBillToPay] = useState(null);
+  const [billToAdvance, setBillToAdvance] = useState(null);
+  const [advanceAmount, setAdvanceAmount] = useState(0);
+  const [advanceAmountDisplay, setAdvanceAmountDisplay] = useState('');
+  const [advancePaymentMethod, setAdvancePaymentMethod] = useState('debit_pix');
+  const [paymentType, setPaymentType] = useState('full');
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentAmountDisplay, setPaymentAmountDisplay] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('debit_pix');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+
+  // Função para formatar valor como moeda brasileira
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
+  };
+
+  // Função para formatar input de moeda
+  const formatCurrencyInput = (value) => {
+    // Remove tudo que não é dígito
+    const numericValue = value.replace(/\D/g, '');
+    
+    // Converte para número dividindo por 100 (centavos)
+    const numberValue = parseFloat(numericValue) / 100;
+    
+    // Se for NaN, retorna 0
+    if (isNaN(numberValue)) return '0,00';
+    
+    // Formata como moeda brasileira sem o símbolo R$
+    return numberValue.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
+  // Função para converter string formatada para número
+  const parseCurrencyInput = (formattedValue) => {
+    const numericValue = formattedValue.replace(/\./g, '').replace(',', '.');
+    return parseFloat(numericValue) || 0;
+  };
+
+  // Função para lidar com mudança do valor da antecipação
+  const handleAdvanceAmountChange = (e) => {
+    const formatted = formatCurrencyInput(e.target.value);
+    setAdvanceAmountDisplay(formatted);
+    setAdvanceAmount(parseCurrencyInput(formatted));
+  };
+
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [paymentFilter, setPaymentFilter] = useState('all'); // 'all', 'debit_pix', 'credit'
 
@@ -2211,6 +2262,40 @@ const AllTransactionsPage = () => {
       alert('Erro ao deletar transação');
     }
   }, [transactionToDelete, loadTransactions]);
+
+  // Função para antecipar fatura
+  const handleAdvanceBill = useCallback(async (transaction) => {
+    setBillToAdvance(transaction);
+    setAdvanceAmount(transaction.amount);
+    setAdvanceAmountDisplay(formatCurrencyInput((transaction.amount * 100).toString()));
+    setAdvancePaymentMethod('debit_pix');
+    setShowAdvanceBillModal(true);
+  }, []);
+
+  // Função para confirmar antecipação da fatura
+  const confirmAdvanceBill = useCallback(async () => {
+    try {
+      if (!billToAdvance || advanceAmount <= 0) {
+        alert('❌ Valor inválido para antecipação');
+        return;
+      }
+
+      const response = await axios.post(`/api/transactions/${billToAdvance._id}/advance-bill`, {
+        amount: advanceAmount,
+        paymentMethod: advancePaymentMethod
+      });
+      
+      if (response.status === 200) {
+        alert('✅ Fatura antecipada com sucesso!');
+        setShowAdvanceBillModal(false);
+        setBillToAdvance(null);
+        loadTransactions(); // Recarregar transações para mostrar o novo status
+      }
+    } catch (error) {
+      console.error('❌ Erro ao antecipar fatura:', error);
+      alert('❌ Erro ao antecipar fatura: ' + (error.response?.data?.error || error.message));
+    }
+  }, [billToAdvance, advanceAmount, advancePaymentMethod, loadTransactions]);
 
   // useEffect para carregamento inicial (apenas uma vez)
   useEffect(() => {
@@ -2399,7 +2484,7 @@ const AllTransactionsPage = () => {
                           ' • 💵 Dinheiro'
                         }
                       </div>
-                      {transaction.notes && (
+                      {transaction.notes && !transaction.isCreditCardBill && (
                         <div className="notes-line">
                           📝 {transaction.notes}
                         </div>
@@ -2410,26 +2495,77 @@ const AllTransactionsPage = () => {
                     </div>
                   </div>
                   <div className="transaction-actions-enhanced">
-                    <button
-                      className="action-btn-enhanced edit"
-                      onClick={() => {
-                        setEditingTransaction(transaction);
-                        setShowEditModal(true);
-                      }}
-                      title="Editar transação"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      className="action-btn-enhanced delete"
-                      onClick={() => {
-                        setTransactionToDelete(transaction);
-                        setShowDeleteModal(true);
-                      }}
-                      title="Excluir transação"
-                    >
-                      🗑️
-                    </button>
+                    {transaction.isCreditCardBill ? (
+                      // 💳 Ações especiais para faturas de cartão
+                      <div className="bill-actions-container">
+                        {(transaction.amount === 0 || transaction.amount <= 0.01) && (transaction.description.includes('PAGA') || transaction.description.includes('SEM GASTOS')) ? (
+                          // Fatura paga - sempre mostrar como PAGA em verde
+                          <span 
+                            className="bill-status-paid"
+                            title="Fatura paga"
+                          >
+                            ✅ PAGA
+                          </span>
+                        ) : transaction.billClosed ? (
+                          <span 
+                            className="bill-status-closed"
+                            title="Esta fatura já foi fechada e não pode mais ser alterada"
+                          >
+                            🔒 Fatura Fechada
+                          </span>
+                        ) : transaction.canAdvanceBill ? (
+                          <button
+                            className="action-btn-enhanced advance-bill"
+                            onClick={() => handleAdvanceBill(transaction)}
+                            title="Antecipar fechamento da fatura"
+                          >
+                            ⚡
+                          </button>
+                        ) : null}
+                        
+                        {/* Botão de pagar fatura só aparece se não estiver paga e tiver valor > 0 */}
+                        {!((transaction.amount === 0 || transaction.amount <= 0.01) && (transaction.description.includes('PAGA') || transaction.description.includes('SEM GASTOS'))) && (
+                          <button
+                            className="action-btn-enhanced pay-bill"
+                            onClick={() => {
+                              setBillToPay(transaction);
+                              setPaymentType('full');
+                              setPaymentAmount(transaction.amount);
+                              setPaymentAmountDisplay(formatCurrencyInput((transaction.amount * 100).toString()));
+                              setPaymentMethod('debit_pix');
+                              setShowPayBillModal(true);
+                            }}
+                            title="Pagar fatura do cartão"
+                          >
+                            💳
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      // Botões normais para outras transações
+                      <>
+                        <button
+                          className="action-btn-enhanced edit"
+                          onClick={() => {
+                            setEditingTransaction(transaction);
+                            setShowEditModal(true);
+                          }}
+                          title="Editar transação"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          className="action-btn-enhanced delete"
+                          onClick={() => {
+                            setTransactionToDelete(transaction);
+                            setShowDeleteModal(true);
+                          }}
+                          title="Excluir transação"
+                        >
+                          🗑️
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -2609,6 +2745,218 @@ const AllTransactionsPage = () => {
         </div>
       )}
       
+      {/* Modal de pagamento de fatura */}
+      {showPayBillModal && billToPay && (
+        <div className="modal-overlay-focused" onClick={() => setShowPayBillModal(false)}>
+          <div className="modal-content edit-card-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>💳 Pagar Fatura de Cartão</h3>
+              <button 
+                className="modal-close"
+                onClick={() => setShowPayBillModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="payment-bill-info">
+                <h4>Detalhes da Fatura</h4>
+                <div className="bill-details">
+                  <div className="bill-item">
+                    <span>Cartão:</span>
+                    <strong>{billToPay.description?.replace('Fatura - ', '')}</strong>
+                  </div>
+                  <div className="bill-item">
+                    <span>Período:</span>
+                    <strong>{new Date(billToPay.date).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong>
+                  </div>
+                  <div className="bill-item">
+                    <span>Valor Total:</span>
+                    <strong className="bill-amount">R$ {billToPay.amount.toFixed(2)}</strong>
+                  </div>
+                  <div className="bill-item">
+                    <span>Vencimento:</span>
+                    <strong>{new Date(billToPay.date).toLocaleDateString('pt-BR')}</strong>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="payment-options">
+                <h4>Opções de Pagamento</h4>
+                <div className="payment-method-selector">
+                  <label className={paymentType === 'full' ? 'selected' : ''}>
+                    <input 
+                      type="radio" 
+                      name="paymentOption" 
+                      value="full" 
+                      checked={paymentType === 'full'}
+                      onChange={(e) => {
+                        setPaymentType(e.target.value);
+                        setPaymentAmount(billToPay.amount);
+                        setPaymentAmountDisplay(formatCurrencyInput((billToPay.amount * 100).toString()));
+                      }}
+                    />
+                    <span>Pagamento à vista (valor total)</span>
+                  </label>
+                  <label className={paymentType === 'partial' ? 'selected' : ''}>
+                    <input 
+                      type="radio" 
+                      name="paymentOption" 
+                      value="partial" 
+                      checked={paymentType === 'partial'}
+                      onChange={(e) => {
+                        setPaymentType(e.target.value);
+                        setPaymentAmount(0);
+                        setPaymentAmountDisplay('0,00');
+                      }}
+                    />
+                    <span>Pagamento parcial</span>
+                  </label>
+                </div>
+                
+                <div className="payment-amount">
+                  <label>Valor a pagar:</label>
+                  <div className={`currency-input-wrapper ${paymentType === 'full' ? 'disabled' : ''}`}>
+                    <input 
+                      type="text" 
+                      value={paymentAmountDisplay}
+                      onChange={(e) => {
+                        if (paymentType === 'partial') {
+                          const formatted = formatCurrencyInput(e.target.value);
+                          setPaymentAmountDisplay(formatted);
+                          setPaymentAmount(parseCurrencyInput(formatted));
+                        }
+                      }}
+                      disabled={paymentType === 'full'}
+                      className={`payment-input-currency ${paymentType === 'full' ? 'disabled' : ''}`}
+                      placeholder="0,00"
+                    />
+                  </div>
+                </div>
+                
+                <div className="payment-method">
+                  <label>Forma de pagamento:</label>
+                  <select 
+                    className="payment-select"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                  >
+                    <option value="debit_pix">Débito/PIX</option>
+                    <option value="credit">Cartão de Crédito</option>
+                    <option value="transfer">Transferência</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
+            <div className="modal-actions">
+              <button 
+                className="btn-modal-cancel"
+                onClick={() => {
+                  setShowPayBillModal(false);
+                  setBillToPay(null);
+                }}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-modal-primary"
+                disabled={paymentAmount <= 0}
+                onClick={() => {
+                  // TODO: Implementar lógica de pagamento
+                  console.log('Processar pagamento da fatura:', {
+                    bill: billToPay,
+                    paymentType,
+                    amount: paymentAmount,
+                    method: paymentMethod
+                  });
+                  setShowPayBillModal(false);
+                  setBillToPay(null);
+                }}
+              >
+                💳 Confirmar Pagamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de antecipação de fatura */}
+      {showAdvanceBillModal && billToAdvance && (
+        <div className="modal-overlay-focused" onClick={() => setShowAdvanceBillModal(false)}>
+          <div className="modal-content edit-card-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">⚡ Antecipar Fatura</h3>
+              <button 
+                className="modal-close-btn"
+                onClick={() => setShowAdvanceBillModal(false)}
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="bill-info-section">
+                <h4>📄 Detalhes da Fatura</h4>
+                <p><strong>Descrição:</strong> {billToAdvance.description}</p>
+                <p><strong>Valor Total:</strong> R$ {billToAdvance.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p><strong>Vencimento:</strong> {new Date(billToAdvance.date).toLocaleDateString('pt-BR')}</p>
+              </div>
+
+              <div className="payment-form-section">
+                <h4>💰 Valor a Antecipar</h4>
+                <div className="form-group">
+                  <label className="form-label">Valor (R$)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="0,00"
+                    value={advanceAmountDisplay}
+                    onChange={handleAdvanceAmountChange}
+                  />
+                  <small className="form-help">
+                    Este valor será descontado da fatura e debitado de sua conta
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Forma de Pagamento</label>
+                  <select 
+                    className="form-input"
+                    value={advancePaymentMethod}
+                    onChange={(e) => setAdvancePaymentMethod(e.target.value)}
+                  >
+                    <option value="debit_pix">💳 Débito/PIX</option>
+                    <option value="debit">💳 Débito</option>
+                    <option value="pix">🔄 PIX</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button 
+                className="btn-modal-secondary"
+                onClick={() => {
+                  setShowAdvanceBillModal(false);
+                  setBillToAdvance(null);
+                }}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn-modal-primary"
+                disabled={advanceAmount <= 0}
+                onClick={confirmAdvanceBill}
+              >
+                ⚡ Antecipar e Pagar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editingTransaction && (
         <EditTransactionModal
           transaction={editingTransaction}
@@ -3222,6 +3570,10 @@ const CreditCardPage = () => {
                       <div className="card-holder-info">
                         <div className="card-number-simple">**** **** **** {card.lastDigits || '0000'}</div>
                         <div className="card-holder-name">{card.holderName || 'PORTADOR'}</div>
+                        <div className="closing-day-info">
+                          <span className="closing-day-label">📅 Fechamento:</span>
+                          <span className="closing-day-value">Dia {card.closingDay || '5'}</span>
+                        </div>
                       </div>
                       <div className="card-brand-info">
                         <span className="brand-name">{getCardFlag(card.flag)}</span>
@@ -4949,6 +5301,7 @@ const AddCreditCardModal = ({ onSave, onCancel }) => {
     lastDigits: '',
     limit: '',
     dueDay: '10',
+    closingDay: '5',
     notes: ''
   });
 
@@ -4988,7 +5341,8 @@ const AddCreditCardModal = ({ onSave, onCancel }) => {
     const cardData = {
       ...formData,
       limit: parseFloat(formData.limit) || 0,
-      dueDay: parseInt(formData.dueDay) || 10
+      dueDay: parseInt(formData.dueDay) || 10,
+      closingDay: parseInt(formData.closingDay) || 5
     };
 
     onSave(cardData);
@@ -5061,6 +5415,19 @@ const AddCreditCardModal = ({ onSave, onCancel }) => {
                   className="form-input"
                 />
               </div>
+
+              <div className="form-group">
+                <label>Dia de Fechamento</label>
+                <input
+                  type="number"
+                  value={formData.closingDay}
+                  onChange={(e) => setFormData(prev => ({ ...prev, closingDay: e.target.value }))}
+                  min="1"
+                  max="31"
+                  placeholder="5"
+                  className="form-input"
+                />
+              </div>
             </div>
 
             <div className="form-group">
@@ -5109,6 +5476,7 @@ const EditCreditCardModal = ({ card, onSave, onCancel }) => {
     lastDigits: card.lastDigits || '',
     limit: card.limit?.toString() || '',
     dueDay: card.dueDay?.toString() || '10',
+    closingDay: card.closingDay?.toString() || '5',
     notes: card.notes || ''
   });
 
@@ -5148,7 +5516,8 @@ const EditCreditCardModal = ({ card, onSave, onCancel }) => {
     const cardData = {
       ...formData,
       limit: parseFloat(formData.limit) || 0,
-      dueDay: parseInt(formData.dueDay) || 10
+      dueDay: parseInt(formData.dueDay) || 10,
+      closingDay: parseInt(formData.closingDay) || 5
     };
 
     onSave(cardData);
@@ -5218,6 +5587,19 @@ const EditCreditCardModal = ({ card, onSave, onCancel }) => {
                   min="1"
                   max="31"
                   placeholder="10"
+                  className="form-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Dia de Fechamento</label>
+                <input
+                  type="number"
+                  value={formData.closingDay}
+                  onChange={(e) => setFormData(prev => ({ ...prev, closingDay: e.target.value }))}
+                  min="1"
+                  max="31"
+                  placeholder="5"
                   className="form-input"
                 />
               </div>

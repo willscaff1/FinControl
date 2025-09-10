@@ -56,7 +56,11 @@ const TransactionSchema = new mongoose.Schema({
   isInstallment: { type: Boolean, default: false },
   installmentNumber: { type: Number }, // Número da parcela atual (1, 2, 3...)
   totalInstallments: { type: Number }, // Total de parcelas
-  installmentParentId: { type: mongoose.Schema.Types.ObjectId } // ID da primeira parcela
+  installmentParentId: { type: mongoose.Schema.Types.ObjectId }, // ID da primeira parcela
+  // Campos para faturas de cartão de crédito
+  isCreditCardBill: { type: Boolean, default: false },
+  billClosed: { type: Boolean, default: false },
+  canAdvanceBill: { type: Boolean, default: false }
 }, { timestamps: true });
 
 const User = mongoose.model('User', UserSchema);
@@ -84,6 +88,7 @@ const CreditCardSchema = new mongoose.Schema({
   lastDigits: String,
   limit: Number,
   dueDay: Number,
+  closingDay: Number, // Dia de fechamento da fatura
   notes: String,
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
@@ -95,13 +100,269 @@ const CreditCard = mongoose.model('CreditCard', CreditCardSchema);
 const auth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token) return res.status(401).json({ error: 'Token necessário' });
+    console.log('🔐 [AUTH] Token recebido:', token ? 'Sim' : 'Não');
     
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!token) {
+      console.log('🔐 [AUTH] ❌ Token não fornecido');
+      return res.status(401).json({ error: 'Token necessário' });
+    }
+    
+    const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-key';
+    const decoded = jwt.verify(token, jwtSecret);
+    console.log('🔐 [AUTH] Token decodificado para userId:', decoded.userId);
+    
     req.user = await User.findById(decoded.userId);
+    console.log('🔐 [AUTH] Usuário encontrado:', req.user ? 'Sim' : 'Não');
+    
+    if (!req.user) {
+      console.log('🔐 [AUTH] ❌ Usuário não encontrado no banco');
+      return res.status(401).json({ error: 'Usuário não encontrado' });
+    }
+    
     next();
   } catch (error) {
+    console.error('🔐 [AUTH] ❌ Erro na autenticação:', error.message);
     res.status(401).json({ error: 'Token inválido' });
+  }
+};
+
+// Função para determinar a que fatura pertence uma transação de cartão
+const getBillPeriodForTransaction = (transactionDate, closingDay) => {
+  const txDate = new Date(transactionDate);
+  const txDay = txDate.getDate();
+  const txMonth = txDate.getMonth();
+  const txYear = txDate.getFullYear();
+  
+  // Se a transação foi após o fechamento, vai para a próxima fatura
+  if (txDay > closingDay) {
+    // Próxima fatura
+    let billMonth = txMonth + 2; // +1 para próximo mês, +1 para vencimento
+    let billYear = txYear;
+    
+    if (billMonth > 11) {
+      billMonth -= 12;
+      billYear += 1;
+    }
+    
+    return { month: billMonth + 1, year: billYear }; // +1 porque JavaScript usa 0-11
+  } else {
+    // Fatura do mês seguinte
+    let billMonth = txMonth + 1;
+    let billYear = txYear;
+    
+    if (billMonth > 11) {
+      billMonth -= 12;
+      billYear += 1;
+    }
+    
+    return { month: billMonth + 1, year: billYear }; // +1 porque JavaScript usa 0-11
+  }
+};
+
+// Função para gerar automaticamente o pagamento da fatura do cartão de crédito
+const generateCreditCardBill = async (userId, month, year) => {
+  try {
+    console.log(`💳 [FATURA] === INICIANDO GERAÇÃO PARA ${month}/${year} ===`);
+    
+    // Buscar todos os cartões do usuário
+    const creditCards = await CreditCard.find({ userId });
+    console.log(`💳 [FATURA] Cartões encontrados: ${creditCards.length}`);
+    
+    if (creditCards.length === 0) {
+      console.log('💳 [FATURA] ❌ Nenhum cartão encontrado');
+      return;
+    }
+    
+    // Buscar banco padrão para débito da fatura
+    const defaultBank = await Bank.findOne({ userId });
+    const bankName = defaultBank ? defaultBank.name : 'Banco Principal';
+    console.log(`💳 [FATURA] Banco para débito das faturas: ${bankName}`);
+    
+    // Processar cada cartão
+    for (const card of creditCards) {
+      console.log(`💳 [FATURA] >>> Processando cartão: ${card.name}`);
+      
+      const closingDay = card.closingDay || 29;
+      const dueDay = card.dueDay || 5;
+      
+      // Calcular período de fatura baseado na data de fechamento
+      // Para fatura de Oct/2025 (que vence em 05/10/2025), incluir gastos de 30/08 até 29/09
+      let startMonth = month - 2; // 2 meses atrás
+      let startYear = year;
+      let endMonth = month - 1; // mês anterior
+      let endYear = year;
+      
+      // Ajustar se passou do ano
+      if (startMonth <= 0) {
+        startMonth += 12;
+        startYear -= 1;
+      }
+      if (endMonth <= 0) {
+        endMonth += 12;
+        endYear -= 1;
+      }
+      
+      const startDate = new Date(startYear, startMonth - 1, closingDay);
+      const endDate = new Date(endYear, endMonth - 1, closingDay - 1, 23, 59, 59, 999);
+      
+      // Limitar até hoje para não incluir gastos futuros
+      const today = new Date();
+      const limitDate = endDate > today ? today : endDate;
+      
+      console.log(`💳 [FATURA] ${card.name}: Buscando gastos de ${startDate.toLocaleDateString('pt-BR')} até ${limitDate.toLocaleDateString('pt-BR')}`);
+      
+      // BUSCAR GASTOS DO PERÍODO DA FATURA
+      const cardExpenses = await Transaction.find({
+        userId,
+        creditCard: card.name,
+        paymentMethod: 'credito',
+        type: 'expense',
+        date: {
+          $gte: startDate,
+          $lte: limitDate
+        },
+        isRecurring: { $ne: true }, // Excluir templates
+        isCreditCardBill: { $ne: true } // Excluir outras faturas
+      });
+      
+      const totalAmount = cardExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+      console.log(`💳 [FATURA] ${card.name}: ${cardExpenses.length} transações = R$ ${totalAmount.toFixed(2)}`);
+      
+      // VERIFICAR SE JÁ EXISTE FATURA NO MÊS ATUAL
+      const startOfCurrentMonth = new Date(year, month - 1, 1);
+      const endOfCurrentMonth = new Date(year, month, 0, 23, 59, 59, 999);
+      
+      const existingBill = await Transaction.findOne({
+        userId,
+        description: { $regex: `^Pagamento Fatura ${card.name}` },
+        date: {
+          $gte: startOfCurrentMonth,
+          $lte: endOfCurrentMonth
+        },
+        isCreditCardBill: true
+      });
+      
+      if (!existingBill) {
+        // CRIAR NOVA FATURA (mesmo se R$ 0,00)
+        const billDate = new Date(year, month - 1, dueDay, 12, 0, 0);
+        
+        // Calcular se a fatura está fechada baseado na data de fechamento
+        const currentDate = new Date();
+        const closingDate = new Date(endYear, endMonth - 1, closingDay);
+        const isBillClosed = currentDate >= closingDate;
+        
+        // Se valor zerado, sempre marcar como PAGA
+        let description = `Pagamento Fatura ${card.name}`;
+        let notes = `Fatura de ${startDate.toLocaleDateString('pt-BR')} até ${limitDate.toLocaleDateString('pt-BR')}`;
+        
+        if (totalAmount === 0) {
+          description = `Pagamento Fatura ${card.name} - PAGA`;
+          notes = 'Fatura paga';
+        } else {
+          notes += isBillClosed ? ' - FATURA FECHADA' : ' - Pode antecipar fatura';
+        }
+        
+        const billTransaction = new Transaction({
+          description,
+          amount: totalAmount,
+          type: 'expense',
+          category: 'Cartão de Crédito',
+          paymentMethod: 'debito',
+          bank: bankName,
+          userId,
+          date: billDate,
+          isRecurring: false,
+          isCreditCardBill: true,
+          billClosed: isBillClosed,
+          canAdvanceBill: !isBillClosed && totalAmount > 0,
+          notes
+        });
+        
+        await billTransaction.save();
+        console.log(`💳 [FATURA] ✅ CRIADA: ${card.name} - R$ ${totalAmount.toFixed(2)} (${dueDay}/${month}/${year}) - ${isBillClosed ? 'FECHADA' : 'PODE ANTECIPAR'}`);
+        
+      } else {
+        // ATUALIZAR FATURA EXISTENTE se valor mudou
+        if (Math.abs(existingBill.amount - totalAmount) > 0.01 || !existingBill.description.includes('PAGA')) {
+          const oldAmount = existingBill.amount;
+          
+          // Recalcular status da fatura
+          const currentDate = new Date();
+          const closingDate = new Date(endYear, endMonth - 1, closingDay);
+          const isBillClosed = currentDate >= closingDate;
+          
+          // Atualizar descrição se fatura foi zerada/paga
+          let description = `Pagamento Fatura ${card.name}`;
+          let notes = `Fatura de ${startDate.toLocaleDateString('pt-BR')} até ${limitDate.toLocaleDateString('pt-BR')} (atualizada)`;
+          
+          if (totalAmount === 0) {
+            description = `Pagamento Fatura ${card.name} - PAGA`;
+            notes = 'Fatura paga';
+          } else {
+            notes += isBillClosed ? ' - FATURA FECHADA' : ' - Pode antecipar fatura';
+          }
+          
+          existingBill.description = description;
+          existingBill.amount = totalAmount;
+          existingBill.billClosed = isBillClosed;
+          existingBill.canAdvanceBill = !isBillClosed && totalAmount > 0;
+          existingBill.notes = notes;
+          await existingBill.save();
+          
+          console.log(`💳 [FATURA] 🔄 ATUALIZADA: ${card.name} - R$ ${oldAmount.toFixed(2)} → R$ ${totalAmount.toFixed(2)} - ${isBillClosed ? 'FECHADA' : 'PODE ANTECIPAR'}`);
+        } else {
+          console.log(`💳 [FATURA] ✓ Já existe: ${card.name} - R$ ${totalAmount.toFixed(2)}`);
+        }
+      }
+    }
+    console.log(`💳 [FATURA] === CONCLUÍDO PARA ${month}/${year} ===`);
+    
+  } catch (error) {
+    console.error('💳 [FATURA] ❌ ERRO:', error);
+  }
+};
+
+// Função para recalcular faturas de cartão dinamicamente quando gastos mudarem
+const recalculateCreditCardBills = async (userId, affectedCards = null) => {
+  try {
+    console.log('💳 [RECALC] Iniciando recálculo dinâmico de faturas...');
+    
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentYear = currentDate.getFullYear();
+    
+    // Se cartões específicos foram afetados, só recalcular esses
+    let cardsToProcess = [];
+    if (affectedCards && affectedCards.length > 0) {
+      cardsToProcess = await CreditCard.find({ 
+        userId, 
+        name: { $in: affectedCards } 
+      });
+    } else {
+      cardsToProcess = await CreditCard.find({ userId });
+    }
+    
+    console.log(`💳 [RECALC] Processando ${cardsToProcess.length} cartão(ões)`);
+    
+    for (const card of cardsToProcess) {
+      // Recalcular faturas dos últimos 3 meses
+      for (let i = 0; i <= 2; i++) {
+        let targetMonth = currentMonth + i;
+        let targetYear = currentYear;
+        
+        if (targetMonth > 12) {
+          targetMonth = targetMonth - 12;
+          targetYear = targetYear + 1;
+        }
+        
+        console.log(`💳 [RECALC] Recalculando ${card.name} para ${targetMonth}/${targetYear}`);
+        await generateCreditCardBill(userId, targetMonth, targetYear);
+      }
+    }
+    
+    console.log('💳 [RECALC] ✅ Recálculo concluído');
+  } catch (error) {
+    console.error('💳 [RECALC] Erro:', error);
   }
 };
 
@@ -228,6 +489,10 @@ const generateRecurringTransactions = async (userId, month, year) => {
         transactionsCreated++;
       }
     }
+    
+    // === GERAÇÃO AUTOMÁTICA DE FATURA DO CARTÃO ===
+    // Gerar automaticamente o pagamento da fatura do mês anterior
+    await generateCreditCardBill(userId, month, year);
     
     if (transactionsCreated > 0) {
       console.log(`✅ ${transactionsCreated} transações recorrentes criadas para ${month}/${year}`);
@@ -383,21 +648,39 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
+    console.log('🔐 [LOGIN] Tentativa de login:', req.body);
     const { email, password } = req.body;
     
+    if (!email || !password) {
+      console.log('🔐 [LOGIN] ❌ Email ou senha não fornecidos');
+      return res.status(400).json({ error: 'Email e senha são obrigatórios' });
+    }
+    
     const user = await User.findOne({ email });
+    console.log('🔐 [LOGIN] Usuário encontrado:', user ? 'Sim' : 'Não');
+    
     if (!user) {
+      console.log('🔐 [LOGIN] ❌ Usuário não encontrado:', email);
       return res.status(400).json({ error: 'Credenciais inválidas' });
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
+    console.log('🔐 [LOGIN] Senha válida:', validPassword ? 'Sim' : 'Não');
+    
     if (!validPassword) {
+      console.log('🔐 [LOGIN] ❌ Senha inválida para:', email);
       return res.status(400).json({ error: 'Credenciais inválidas' });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+    const jwtSecret = process.env.JWT_SECRET || 'fallback-secret-key';
+    console.log('🔐 [LOGIN] JWT_SECRET definido:', process.env.JWT_SECRET ? 'Sim' : 'Não (usando fallback)');
+    
+    const token = jwt.sign({ userId: user._id }, jwtSecret);
+    console.log('🔐 [LOGIN] ✅ Login bem-sucedido para:', email);
+    
     res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
   } catch (error) {
+    console.error('🔐 [LOGIN] ❌ Erro no login:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -476,6 +759,37 @@ app.get('/api/transactions', auth, async (req, res) => {
     res.json(transactions);
   } catch (error) {
     console.error(`❌ [BACKEND DEBUG] Erro:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ENDPOINT PARA RECALCULAR FATURAS DE CARTÃO MANUALMENTE
+app.post('/api/recalculate-bills', auth, async (req, res) => {
+  try {
+    console.log('💳 [MANUAL] Iniciando recálculo manual de faturas...');
+    
+    const { cardNames, months } = req.body;
+    
+    // Se não especificado, recalcular para todos os cartões e próximos 3 meses
+    const currentDate = new Date();
+    const currentMonth = currentDate.getMonth() + 1;
+    const currentYear = currentDate.getFullYear();
+    
+    if (cardNames && cardNames.length > 0) {
+      // Recalcular cartões específicos
+      await recalculateCreditCardBills(req.user._id, cardNames);
+    } else {
+      // Recalcular todos os cartões
+      await recalculateCreditCardBills(req.user._id);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Faturas recalculadas com sucesso!',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('💳 [MANUAL] Erro:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -685,6 +999,12 @@ app.post('/api/transactions', auth, async (req, res) => {
       });
       await currentTransaction.save();
       
+      // 🔄 RECALCULAR FATURAS se for transação fixa de cartão de crédito
+      if (transactionData.paymentMethod === 'credito' && transactionData.creditCard) {
+        console.log('💳 [TRANSAÇÃO FIXA] Recalculando faturas para:', transactionData.creditCard);
+        await recalculateCreditCardBills(req.user._id, [transactionData.creditCard]);
+      }
+      
       res.json(currentTransaction);
     } else if (transactionData.isInstallment) {
       // Transação parcelada
@@ -789,6 +1109,13 @@ app.post('/api/transactions', auth, async (req, res) => {
       }
       
       console.log(`✅ ${savedInstallments.length} parcelas salvas com sucesso`);
+      
+      // 🔄 RECALCULAR FATURAS se for parcelamento de cartão de crédito
+      if (transactionData.paymentMethod === 'credito' && transactionData.creditCard) {
+        console.log('💳 [PARCELAMENTO] Recalculando faturas para:', transactionData.creditCard);
+        await recalculateCreditCardBills(req.user._id, [transactionData.creditCard]);
+      }
+      
       res.json(savedInstallments[0]); // Retornar a primeira parcela
     } else {
       // Transação normal
@@ -856,6 +1183,13 @@ app.post('/api/transactions', auth, async (req, res) => {
         date: transactionDate
       });
       await transaction.save();
+      
+      // 🔄 RECALCULAR FATURAS se for transação de cartão de crédito
+      if (transactionData.paymentMethod === 'credito' && transactionData.creditCard) {
+        console.log('💳 [NOVA TRANSAÇÃO] Recalculando faturas para:', transactionData.creditCard);
+        await recalculateCreditCardBills(req.user._id, [transactionData.creditCard]);
+      }
+      
       res.json(transaction);
     }
   } catch (error) {
@@ -908,6 +1242,14 @@ app.put('/api/transactions/:id', auth, async (req, res) => {
     if (!transaction) {
       console.log('❌ Transação não encontrada');
       return res.status(404).json({ error: 'Transação não encontrada' });
+    }
+    
+    // 🚫 BLOQUEAR EDIÇÃO DE FATURAS DE CARTÃO (criadas automaticamente)
+    if (transaction.isCreditCardBill) {
+      console.log('🚫 Tentativa de editar fatura automática bloqueada');
+      return res.status(403).json({ 
+        error: 'Não é possível editar faturas de cartão criadas automaticamente' 
+      });
     }
     
     console.log('✅ Transação encontrada:', {
@@ -1016,6 +1358,15 @@ app.put('/api/transactions/:id', auth, async (req, res) => {
         userId: req.user._id
       });
       
+      // 🔄 RECALCULAR FATURAS se atualizou transações de cartão de crédito
+      if (updateData.paymentMethod === 'credito' && updateData.creditCard) {
+        console.log('💳 [EDIÇÃO TODAS] Recalculando faturas para:', updateData.creditCard);
+        await recalculateCreditCardBills(req.user._id, [updateData.creditCard]);
+      } else if (transaction.paymentMethod === 'credito' && transaction.creditCard) {
+        console.log('💳 [EDIÇÃO TODAS] Recalculando faturas para cartão original:', transaction.creditCard);
+        await recalculateCreditCardBills(req.user._id, [transaction.creditCard]);
+      }
+      
       res.json(updatedTransaction);
       
     } else {
@@ -1038,6 +1389,16 @@ app.put('/api/transactions/:id', auth, async (req, res) => {
       );
       
       console.log('✅ Transação atualizada:', updatedTransaction);
+      
+      // 🔄 RECALCULAR FATURAS se editou transação de cartão de crédito
+      if (updateData.paymentMethod === 'credito' && updateData.creditCard) {
+        console.log('💳 [EDIÇÃO ÚNICA] Recalculando faturas para:', updateData.creditCard);
+        await recalculateCreditCardBills(req.user._id, [updateData.creditCard]);
+      } else if (transaction.paymentMethod === 'credito' && transaction.creditCard) {
+        console.log('💳 [EDIÇÃO ÚNICA] Recalculando faturas para cartão original:', transaction.creditCard);
+        await recalculateCreditCardBills(req.user._id, [transaction.creditCard]);
+      }
+      
       res.json(updatedTransaction);
     }
   } catch (error) {
@@ -1054,13 +1415,36 @@ app.put('/api/transactions/:id', auth, async (req, res) => {
 // Delete transaction (apenas do mês atual)
 app.delete('/api/transactions/:id', auth, async (req, res) => {
   try {
-    const transaction = await Transaction.findOneAndDelete({
+    const transaction = await Transaction.findOne({
       _id: req.params.id,
       userId: req.user._id
     });
     
     if (!transaction) {
       return res.status(404).json({ error: 'Transação não encontrada' });
+    }
+    
+    // 🚫 BLOQUEAR EXCLUSÃO DE FATURAS DE CARTÃO (criadas automaticamente)
+    if (transaction.isCreditCardBill) {
+      console.log('🚫 Tentativa de excluir fatura automática bloqueada');
+      return res.status(403).json({ 
+        error: 'Não é possível excluir faturas de cartão criadas automaticamente' 
+      });
+    }
+    
+    // Guardar info do cartão antes de deletar para recalcular fatura
+    const wasCard = transaction.paymentMethod === 'credito' && transaction.creditCard;
+    const cardName = transaction.creditCard;
+    
+    await Transaction.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user._id
+    });
+    
+    // 🔄 RECALCULAR FATURAS se deletou transação de cartão de crédito
+    if (wasCard && cardName) {
+      console.log('💳 [EXCLUSÃO] Recalculando faturas para:', cardName);
+      await recalculateCreditCardBills(req.user._id, [cardName]);
     }
     
     res.json({ message: 'Transação deletada com sucesso' });
@@ -1079,6 +1463,14 @@ app.delete('/api/transactions/:id/recurring', auth, async (req, res) => {
     
     if (!transaction) {
       return res.status(404).json({ error: 'Transação não encontrada' });
+    }
+    
+    // 🚫 BLOQUEAR EXCLUSÃO DE FATURAS DE CARTÃO (criadas automaticamente)
+    if (transaction.isCreditCardBill) {
+      console.log('🚫 Tentativa de excluir fatura automática bloqueada (recorrente)');
+      return res.status(403).json({ 
+        error: 'Não é possível excluir faturas de cartão criadas automaticamente' 
+      });
     }
     
     let templateId;
@@ -1125,6 +1517,14 @@ app.delete('/api/transactions/:id/installments', auth, async (req, res) => {
     
     if (!transaction) {
       return res.status(404).json({ error: 'Transação não encontrada' });
+    }
+    
+    // 🚫 BLOQUEAR EXCLUSÃO DE FATURAS DE CARTÃO (criadas automaticamente)
+    if (transaction.isCreditCardBill) {
+      console.log('🚫 Tentativa de excluir fatura automática bloqueada (parcelamentos)');
+      return res.status(403).json({ 
+        error: 'Não é possível excluir faturas de cartão criadas automaticamente' 
+      });
     }
     
     let parentId;
@@ -1615,6 +2015,88 @@ app.delete('/api/banks/:id', auth, async (req, res) => {
     }
     res.json({ message: 'Banco deletado com sucesso' });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Antecipar fatura de cartão
+app.post('/api/transactions/:id/advance-bill', auth, async (req, res) => {
+  try {
+    const { amount, paymentMethod } = req.body;
+    
+    const transaction = await Transaction.findOne({
+      _id: req.params.id,
+      userId: req.user._id,
+      isCreditCardBill: true
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ error: 'Fatura não encontrada' });
+    }
+
+    if (transaction.billClosed) {
+      return res.status(400).json({ error: 'Fatura já está fechada' });
+    }
+
+    if (!transaction.canAdvanceBill) {
+      return res.status(400).json({ error: 'Esta fatura não pode ser antecipada' });
+    }
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valor da antecipação deve ser maior que zero' });
+    }
+
+    if (amount > transaction.amount) {
+      return res.status(400).json({ error: 'Valor da antecipação não pode ser maior que o valor da fatura' });
+    }
+
+    // Criar transação de antecipação (débito da conta)
+    const advanceTransaction = new Transaction({
+      description: `Antecipação: ${transaction.description}`,
+      amount: amount,
+      type: 'expense',
+      category: 'Antecipação de Fatura',
+      paymentMethod: paymentMethod || 'debit_pix',
+      bank: transaction.bank,
+      userId: req.user._id,
+      date: new Date(),
+      isRecurring: false,
+      isCreditCardBill: false,
+      notes: `Antecipação de R$ ${amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} da fatura ${transaction.description}`
+    });
+
+    await advanceTransaction.save();
+
+    // Atualizar valor da fatura
+    const newAmount = transaction.amount - amount;
+    transaction.amount = newAmount;
+    
+    // Se fatura foi totalmente paga, marcar como PAGA
+    if (newAmount <= 0) {
+      transaction.billClosed = true;
+      transaction.canAdvanceBill = false;
+      transaction.description = transaction.description.replace(/^Pagamento Fatura (.+?)(\s-\sPAGA)?(\s\(ANTECIPADA\))?$/, 'Pagamento Fatura $1 - PAGA');
+      transaction.notes = (transaction.notes || '').replace(' - Pode antecipar fatura', '') + ' - FATURA PAGA ANTECIPADAMENTE';
+    } else {
+      // Fatura parcialmente antecipada
+      if (!transaction.description.includes('(ANTECIPADA)')) {
+        transaction.description = `${transaction.description} (ANTECIPADA)`;
+      }
+    }
+    
+    await transaction.save();
+
+    // Regenerar faturas para atualizar status
+    const billDate = new Date(transaction.date);
+    await generateCreditCardBill(req.user._id, billDate.getMonth() + 1, billDate.getFullYear());
+
+    res.json({ 
+      message: 'Fatura antecipada com sucesso',
+      transaction: transaction,
+      advanceTransaction: advanceTransaction
+    });
+  } catch (error) {
+    console.error('❌ Erro ao antecipar fatura:', error);
     res.status(500).json({ error: error.message });
   }
 });
